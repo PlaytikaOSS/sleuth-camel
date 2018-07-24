@@ -1,0 +1,147 @@
+/*
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2018 Playtika
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+package com.playtika.sleuth.camel;
+
+import org.apache.camel.Exchange;
+import org.apache.camel.management.event.ExchangeCompletedEvent;
+import org.apache.camel.management.event.ExchangeCreatedEvent;
+import org.apache.camel.management.event.ExchangeSentEvent;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.springframework.cloud.sleuth.Span;
+import org.springframework.cloud.sleuth.Tracer;
+
+import java.util.EventObject;
+
+import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
+import static java.util.Collections.emptyMap;
+import static java.util.Collections.singletonMap;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.*;
+
+@RunWith(MockitoJUnitRunner.StrictStubs.class)
+public class SentEventNotifierTest {
+
+    @Mock
+    private Tracer tracer;
+    @InjectMocks
+    private SentEventNotifier sentEventNotifier;
+
+    @Test
+    public void shouldProceedRemoteSpan() {
+        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        Span currentSpan = mock(Span.class);
+        Span spanToSend = mock(Span.class);
+        Span.SpanBuilder spanBuilder = mock(Span.SpanBuilder.class);
+
+        when(tracer.isTracing()).thenReturn(true);
+        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
+        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
+        when(currentSpan.isRemote()).thenReturn(true);
+        when(currentSpan.toBuilder()).thenReturn(spanBuilder);
+        when(spanBuilder.remote(false)).thenReturn(spanBuilder);
+        when(spanBuilder.build()).thenReturn(spanToSend);
+
+        sentEventNotifier.notify(event);
+
+        verify(currentSpan).logEvent(Span.SERVER_SEND);
+        verify(tracer).close(spanToSend);
+        verifyNoMoreInteractions(tracer, currentSpan, spanToSend);
+    }
+
+    @Test
+    public void shouldProceedLocalSpan() {
+        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        Span currentSpan = mock(Span.class);
+
+        when(tracer.isTracing()).thenReturn(true);
+        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
+        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
+        when(currentSpan.isRemote()).thenReturn(false);
+
+        sentEventNotifier.notify(event);
+
+        verify(currentSpan).logEvent(Span.CLIENT_RECV);
+        verify(tracer).close(currentSpan);
+        verifyNoMoreInteractions(tracer, currentSpan);
+    }
+
+    @Test
+    public void shouldNotProceedIfSpanNotFromCamel() {
+        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        Span currentSpan = mock(Span.class);
+
+        when(tracer.isTracing()).thenReturn(true);
+        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
+        when(currentSpan.tags()).thenReturn(emptyMap());
+
+        sentEventNotifier.notify(event);
+
+        verifyNoMoreInteractions(tracer, currentSpan);
+    }
+
+    @Test
+    public void shouldNotProceedIfNotTracing() {
+        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+
+        when(tracer.isTracing()).thenReturn(false);
+
+        sentEventNotifier.notify(event);
+
+        verifyNoMoreInteractions(tracer);
+    }
+
+
+    @Test
+    public void shouldNotBeEnabledInCaseOfCreatedEvent() {
+        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+
+        boolean result = sentEventNotifier.isEnabled(event);
+
+        assertFalse(result);
+    }
+
+    @Test
+    public void shouldBeEnabledInCaseOfSentEvent() {
+        EventObject event = new ExchangeSentEvent(mock(Exchange.class), null, 100);
+
+        boolean result = sentEventNotifier.isEnabled(event);
+
+        assertTrue(result);
+    }
+
+    @Test
+    public void shouldBeEnabledInCaseOfCompletedEvent() {
+        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
+
+        boolean result = sentEventNotifier.isEnabled(event);
+
+        assertTrue(result);
+    }
+}
