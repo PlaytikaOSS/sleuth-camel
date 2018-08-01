@@ -24,15 +24,19 @@
 
 package com.playtika.sleuth.camel;
 
+import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.management.event.ExchangeCompletedEvent;
 import org.apache.camel.management.event.ExchangeCreatedEvent;
+import org.apache.camel.management.event.ExchangeFailedEvent;
 import org.apache.camel.management.event.ExchangeSentEvent;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
+import org.springframework.cloud.sleuth.ErrorParser;
 import org.springframework.cloud.sleuth.Span;
 import org.springframework.cloud.sleuth.Tracer;
 
@@ -50,8 +54,15 @@ public class SentEventNotifierTest {
 
     @Mock
     private Tracer tracer;
+    @Mock
+    private ErrorParser errorParser;
     @InjectMocks
     private SentEventNotifier sentEventNotifier;
+
+    @After
+    public void tearDown() {
+        verifyNoMoreInteractions(tracer, errorParser);
+    }
 
     @Test
     public void shouldProceedRemoteSpan() {
@@ -72,7 +83,7 @@ public class SentEventNotifierTest {
 
         verify(currentSpan).logEvent(Span.SERVER_SEND);
         verify(tracer).close(spanToSend);
-        verifyNoMoreInteractions(tracer, currentSpan, spanToSend);
+        verifyNoMoreInteractions(currentSpan, spanToSend);
     }
 
     @Test
@@ -89,7 +100,48 @@ public class SentEventNotifierTest {
 
         verify(currentSpan).logEvent(Span.CLIENT_RECV);
         verify(tracer).close(currentSpan);
-        verifyNoMoreInteractions(tracer, currentSpan);
+        verifyNoMoreInteractions(currentSpan);
+    }
+
+    @Test
+    public void shouldProceedWithFailureMessage() {
+        RuntimeException exception = new RuntimeException("exception message");
+        Exchange mock = mock(Exchange.class);
+        Span currentSpan = mock(Span.class);
+        EventObject event = new ExchangeCreatedEvent(mock);
+
+        when(tracer.isTracing()).thenReturn(true);
+        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
+        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
+        when(currentSpan.isRemote()).thenReturn(false);
+        when(mock.getException()).thenReturn(exception);
+
+        sentEventNotifier.notify(event);
+
+        verify(currentSpan).logEvent(Span.CLIENT_RECV);
+        verify(tracer).close(currentSpan);
+        verify(errorParser).parseErrorTags(currentSpan, exception);
+        verifyNoMoreInteractions(currentSpan);
+    }
+
+    @Test
+    public void shouldNotProceedIfCameFromDifferentRoute() {
+        Endpoint eventEndpoint = mock(Endpoint.class);
+        Endpoint exchangeEndpoint = mock(Endpoint.class);
+        Exchange exchange = mock(Exchange.class);
+        Span currentSpan = mock(Span.class);
+        EventObject event = new ExchangeSentEvent(exchange, eventEndpoint, 0);
+
+        when(tracer.isTracing()).thenReturn(true);
+        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
+        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
+        when(exchange.getFromEndpoint()).thenReturn(exchangeEndpoint);
+        when(eventEndpoint.getEndpointKey()).thenReturn("direct:/test1");
+        when(exchangeEndpoint.getEndpointKey()).thenReturn("direct:/test2");
+
+        sentEventNotifier.notify(event);
+
+        verifyNoMoreInteractions(currentSpan);
     }
 
     @Test
@@ -103,7 +155,7 @@ public class SentEventNotifierTest {
 
         sentEventNotifier.notify(event);
 
-        verifyNoMoreInteractions(tracer, currentSpan);
+        verifyNoMoreInteractions(currentSpan);
     }
 
     @Test
@@ -113,10 +165,7 @@ public class SentEventNotifierTest {
         when(tracer.isTracing()).thenReturn(false);
 
         sentEventNotifier.notify(event);
-
-        verifyNoMoreInteractions(tracer);
     }
-
 
     @Test
     public void shouldNotBeEnabledInCaseOfCreatedEvent() {
@@ -139,6 +188,15 @@ public class SentEventNotifierTest {
     @Test
     public void shouldBeEnabledInCaseOfCompletedEvent() {
         EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
+
+        boolean result = sentEventNotifier.isEnabled(event);
+
+        assertTrue(result);
+    }
+
+    @Test
+    public void shouldBeEnabledInCaseOfFailedEvent() {
+        EventObject event = new ExchangeFailedEvent(mock(Exchange.class));
 
         boolean result = sentEventNotifier.isEnabled(event);
 

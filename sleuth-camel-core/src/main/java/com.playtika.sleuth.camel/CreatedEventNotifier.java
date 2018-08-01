@@ -53,7 +53,7 @@ public class CreatedEventNotifier extends EventNotifierSupport {
 
     @Override
     public void notify(EventObject event) {
-        log.trace("Caught event [{}] - processing...", event);
+        log.trace("Caught an event [{} - {}] - processing...", event.getClass().getSimpleName(), event);
         ExchangeCreatedEvent exchangeCreatedEvent = (ExchangeCreatedEvent) event;
         Exchange exchange = exchangeCreatedEvent.getExchange();
         Endpoint endpoint = exchange.getFromEndpoint();
