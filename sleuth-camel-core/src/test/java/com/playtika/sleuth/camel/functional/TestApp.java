@@ -25,6 +25,7 @@
 package com.playtika.sleuth.camel.functional;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.camel.Processor;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -43,6 +44,7 @@ public class TestApp {
 
     static final String DIRECT_ROUTE_URI = "direct:directRoute";
     static final String MOCK_DIRECT_ROUTE_TO_URI = "mock:directRouteTo";
+    static final String MOCK_EXCEPTION_ROUTE_TO_URI = "mock:exceptionRouteTo";
 
     @Bean
     public Sampler alwaysSampler() {
@@ -55,18 +57,25 @@ public class TestApp {
     }
 
     @Bean
-    public SomeService someService() {
-        return new SomeService();
+    public SomeTracedService someService() {
+        return new SomeTracedService();
     }
 
     @Bean
-    public RoutesBuilder camelRoutes(SomeService someService) {
+    public RoutesBuilder camelRoutes(SomeTracedService someTracedService, Processor mockProcessor) {
         return new RouteBuilder() {
             @Override
             public void configure() {
+
+                onException(RuntimeException.class)
+                        .log(INFO, "Exception caught. Processing fallback...")
+                        .to(MOCK_EXCEPTION_ROUTE_TO_URI)
+                        .routeId("exceptionRoute");
+
                 from(DIRECT_ROUTE_URI)
-                        .log(INFO, "Message is going to be processed..")
-                        .process(exchange -> someService.someMethod())
+                        .log(INFO, "Message is going to be processed...")
+                        .process(mockProcessor)
+                        .process(exchange -> someTracedService.newSpanMethod())
                         .to(MOCK_DIRECT_ROUTE_TO_URI)
                         .routeId("directRoute");
             }
@@ -74,10 +83,9 @@ public class TestApp {
     }
 
     @Slf4j
-    public static class SomeService {
-
+    public static class SomeTracedService {
         @NewSpan
-        void someMethod() {
+        void newSpanMethod() {
             log.info("Some service has been invoked.");
         }
     }

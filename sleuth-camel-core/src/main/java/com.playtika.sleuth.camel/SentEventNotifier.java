@@ -26,13 +26,18 @@ package com.playtika.sleuth.camel;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.camel.Exchange;
+import org.apache.camel.management.event.AbstractExchangeEvent;
 import org.apache.camel.management.event.ExchangeCompletedEvent;
+import org.apache.camel.management.event.ExchangeFailedEvent;
 import org.apache.camel.management.event.ExchangeSentEvent;
 import org.apache.camel.support.EventNotifierSupport;
+import org.springframework.cloud.sleuth.ErrorParser;
 import org.springframework.cloud.sleuth.Span;
 import org.springframework.cloud.sleuth.Tracer;
 
 import java.util.EventObject;
+import java.util.Objects;
 
 import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
 
@@ -41,18 +46,24 @@ import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
 public class SentEventNotifier extends EventNotifierSupport {
 
     private final Tracer tracer;
+    private final ErrorParser errorParser;
 
     @Override
     public void notify(EventObject event) {
-        log.trace("Caught event [{}] - processing...", event);
+        log.trace("Caught an event [{} - {}] - processing...", event.getClass().getSimpleName(), event);
         if (!tracer.isTracing()) {
             log.debug("Skipping event [{}] since it's not tracing...", event);
             return;
         }
 
         Span currentSpan = tracer.getCurrentSpan();
-        if (!currentSpan.tags().containsKey(FROM_CAMEL)) {
+        if (!isCamelSpan(currentSpan)) {
             log.debug("Skipping span {}, since it's not camel one.", currentSpan);
+            return;
+        }
+
+        if (!isFromSourceEndpoint(event)) {
+            log.debug("Skipping span {}, since exchange came not from its source route. Event - [{}].", currentSpan, event);
             return;
         }
 
@@ -66,13 +77,41 @@ public class SentEventNotifier extends EventNotifierSupport {
             currentSpan.logEvent(Span.CLIENT_RECV);
         }
 
+        logExceptionIfExists(event, currentSpan);
+
         tracer.close(currentSpan);
         log.debug("Span {} successfully closed.", currentSpan);
     }
 
+    private boolean isCamelSpan(Span span) {
+        return span.tags().containsKey(FROM_CAMEL);
+    }
+
+    /**
+     * Handling the case when exchange goes to child route, assuming to have single span for all nested routes.
+     */
+    private boolean isFromSourceEndpoint(EventObject event) {
+        if (!(event instanceof ExchangeSentEvent)) {
+            return true;
+        }
+        ExchangeSentEvent exchangeSentEvent = (ExchangeSentEvent) event;
+        Exchange exchange = exchangeSentEvent.getExchange();
+        String exchangeEndpointKey = exchange.getFromEndpoint().getEndpointKey();
+        String eventEndpointKey = exchangeSentEvent.getEndpoint().getEndpointKey();
+        return Objects.equals(exchangeEndpointKey, eventEndpointKey);
+    }
+
+    private void logExceptionIfExists(EventObject event, Span span) {
+        AbstractExchangeEvent abstractExchangeEvent = (AbstractExchangeEvent) event;
+        Exception exception = abstractExchangeEvent.getExchange().getException();
+        if (exception != null) {
+            errorParser.parseErrorTags(span, exception);
+        }
+    }
+
     @Override
     public boolean isEnabled(EventObject event) {
-        return event instanceof ExchangeSentEvent || event instanceof ExchangeCompletedEvent;
+        return event instanceof ExchangeFailedEvent || event instanceof ExchangeCompletedEvent || event instanceof ExchangeSentEvent;
     }
 }
 

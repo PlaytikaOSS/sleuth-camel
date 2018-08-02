@@ -31,6 +31,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.cloud.sleuth.ErrorParser;
 import org.springframework.cloud.sleuth.TraceKeys;
 import org.springframework.cloud.sleuth.Tracer;
 import org.springframework.cloud.sleuth.autoconfig.TraceAutoConfiguration;
@@ -61,8 +62,8 @@ public class SleuthCamelAutoConfiguration {
     }
 
     @Bean
-    public SentEventNotifier sentEventNotifier() {
-        SentEventNotifier sentEventNotifier = new SentEventNotifier(tracer);
+    public SentEventNotifier sentEventNotifier(ErrorParser errorParser) {
+        SentEventNotifier sentEventNotifier = new SentEventNotifier(tracer, errorParser);
         camelContext.getManagementStrategy().addEventNotifier(sentEventNotifier);
         return sentEventNotifier;
     }

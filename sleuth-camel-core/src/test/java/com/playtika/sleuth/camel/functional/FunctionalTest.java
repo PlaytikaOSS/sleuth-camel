@@ -31,6 +31,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.cloud.sleuth.Log;
 import org.springframework.cloud.sleuth.Span;
 import org.springframework.cloud.sleuth.Tracer;
@@ -43,11 +44,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.playtika.sleuth.camel.functional.TestApp.DIRECT_ROUTE_URI;
-import static com.playtika.sleuth.camel.functional.TestApp.MOCK_DIRECT_ROUTE_TO_URI;
+import static com.playtika.sleuth.camel.functional.TestApp.*;
 import static java.util.Comparator.comparingLong;
 import static org.apache.camel.component.mock.MockEndpoint.resetMocks;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
+import static org.springframework.cloud.sleuth.Span.SPAN_ERROR_TAG_NAME;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest(
@@ -66,6 +70,9 @@ public class FunctionalTest {
     @EndpointInject(uri = MOCK_DIRECT_ROUTE_TO_URI)
     private MockEndpoint directRouteMockEndpoint;
 
+    @EndpointInject(uri = MOCK_EXCEPTION_ROUTE_TO_URI)
+    private MockEndpoint exceptionRouteMockEndpoint;
+
     @Autowired
     private ArrayListSpanAccumulator spanAccumulator;
     @Autowired
@@ -73,14 +80,20 @@ public class FunctionalTest {
     @Autowired
     private CamelContext camelContext;
 
+    @MockBean
+    private Processor mockProcessor;
+
     private Span existingSpan;
 
     @After
-    public void close() {
+    public void tearDown() throws Exception {
         resetMocks(camelContext);
         tracer.close(existingSpan);
         existingSpan = null;
         spanAccumulator.getSpans().clear();
+
+        verify(mockProcessor).process(any(Exchange.class));
+        verifyNoMoreInteractions(mockProcessor);
     }
 
     @Test
@@ -96,7 +109,7 @@ public class FunctionalTest {
         assertThat(tracer.isTracing()).isFalse();
 
         //assert message sent with span headers
-        Map<String, Object> headers = getFirstMessageHeaders();
+        Map<String, Object> headers = getFirstMessageHeaders(directRouteMockEndpoint);
         assertThat(headers.size()).isEqualTo(5);
         assertThat(headers.get(TraceMessageHeaders.SPAN_ID_NAME)).isNotNull();
         assertThat(headers.get(TraceMessageHeaders.TRACE_ID_NAME)).isNotNull();
@@ -123,7 +136,7 @@ public class FunctionalTest {
         assertThat(tracer.getCurrentSpan()).isEqualTo(existingSpan);
 
         //assert message sent with span headers
-        Map<String, Object> headers = getFirstMessageHeaders();
+        Map<String, Object> headers = getFirstMessageHeaders(directRouteMockEndpoint);
         assertThat(headers.size()).isEqualTo(6);
         assertThat(headers.get(TraceMessageHeaders.SPAN_ID_NAME)).isNotNull();
         assertThat(headers.get(TraceMessageHeaders.TRACE_ID_NAME)).isEqualTo(existingSpan.traceIdString());
@@ -133,6 +146,8 @@ public class FunctionalTest {
 
         //assert span logs
         assertAccumulatedSpansAndLogsForTestingSpan(Span.CLIENT_SEND, Span.CLIENT_RECV);
+
+        verify(mockProcessor).process(any(Exchange.class));
     }
 
     @Test
@@ -159,7 +174,7 @@ public class FunctionalTest {
         assertThat(tracer.isTracing()).isFalse();
 
         //assert message sent with span headers
-        Map<String, Object> headers = getFirstMessageHeaders();
+        Map<String, Object> headers = getFirstMessageHeaders(directRouteMockEndpoint);
         assertThat(headers.size()).isEqualTo(5);
         assertThat(headers.get(TraceMessageHeaders.SPAN_ID_NAME)).isEqualTo(spanId);
         assertThat(headers.get(TraceMessageHeaders.TRACE_ID_NAME)).isEqualTo(traceId);
@@ -168,12 +183,61 @@ public class FunctionalTest {
 
         //assert span logs
         assertAccumulatedSpansAndLogsForTestingSpan(Span.SERVER_RECV, Span.SERVER_SEND);
+
+        verify(mockProcessor).process(any(Exchange.class));
     }
 
-    private Map<String, Object> getFirstMessageHeaders() {
-        Message message = directRouteMockEndpoint.getExchanges().get(0).getIn();
+    @Test
+    public void shouldSendFailureSpan() throws Exception {
+        String errorMessage = "Something went wrong";
+
+        directRouteMockEndpoint.expectedMessageCount(0);
+        exceptionRouteMockEndpoint.expectedBodiesReceived(1);
+        exceptionRouteMockEndpoint.expectedBodiesReceived(TEST_BODY);
+
+        doThrow(new RuntimeException(errorMessage)).when(mockProcessor).process(any(Exchange.class));
+
+        //test
+        assertThatThrownBy(() -> directRouteProducer.sendBody(TEST_BODY))
+                .isInstanceOf(CamelExecutionException.class);
+
+        directRouteMockEndpoint.assertIsSatisfied();
+        exceptionRouteMockEndpoint.assertIsSatisfied();
+
+        //assert current span
+        assertThat(tracer.isTracing()).isFalse();
+
+        //assert message sent with span headers
+        Map<String, Object> headers = getFirstMessageHeaders(exceptionRouteMockEndpoint);
+        assertThat(headers.size()).isGreaterThanOrEqualTo(4);
+        assertThat(headers.get(TraceMessageHeaders.SPAN_ID_NAME)).isNotNull();
+        assertThat(headers.get(TraceMessageHeaders.TRACE_ID_NAME)).isNotNull();
+        assertThat(headers.get(TraceMessageHeaders.SAMPLED_NAME)).isEqualTo("1");
+        assertThat(headers.get(TraceMessageHeaders.SPAN_NAME_NAME)).isEqualTo("camel::direct://directRoute");
+
+        //assert span logs
+        Span span = getSingleAccumulatedSpan();
+        assertTagApplied(span, SPAN_ERROR_TAG_NAME, errorMessage);
+        assertLogsOrdered(span, Span.CLIENT_SEND, Span.CLIENT_RECV);
+
+        verify(mockProcessor).process(any(Exchange.class));
+    }
+
+    private void assertTagApplied(Span span, String tag, String value) {
+        String sampledErrorMessage = span.tags().get(tag);
+        assertThat(sampledErrorMessage).isEqualTo(value);
+    }
+
+    private Map<String, Object> getFirstMessageHeaders(MockEndpoint endpoint) {
+        Message message = endpoint.getExchanges().get(0).getIn();
         assertThat(message).isNotNull();
         return message.getHeaders();
+    }
+
+    private Span getSingleAccumulatedSpan() {
+        List<Span> spans = spanAccumulator.getSpans();
+        assertThat(spans.size()).isEqualTo(1);
+        return spans.get(0);
     }
 
     private void assertAccumulatedSpansAndLogsForTestingSpan(String... events) {
@@ -187,7 +251,7 @@ public class FunctionalTest {
         assertLogsOrdered(span, events);
     }
 
-    private void assertLogsOrdered(Span span, String[] events) {
+    private void assertLogsOrdered(Span span, String... events) {
         assertThat(span.logs().size()).isEqualTo(events.length);
 
         List<Log> logs = new ArrayList<>(span.logs());
