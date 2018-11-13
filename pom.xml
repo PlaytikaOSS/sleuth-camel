@@ -15,6 +15,10 @@
         <version>1.5.14.RELEASE</version>
     </parent>
 
+    <name>sleuth-camel</name>
+    <description>sleuth-camel</description>
+    <url>https://github.com/Playtika/sleuth-camel</url>
+
     <licenses>
         <license>
             <name>MIT</name>
