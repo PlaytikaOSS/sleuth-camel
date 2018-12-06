@@ -12,7 +12,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>1.5.14.RELEASE</version>
+        <version>1.5.17.RELEASE</version>
     </parent>
 
     <name>sleuth-camel</name>
@@ -42,7 +42,7 @@
         <maven.compiler.target>1.8</maven.compiler.target>
 
         <spring-cloud-dependencies.version>Edgware.SR4</spring-cloud-dependencies.version>
-        <camel.version>2.21.1</camel.version>
+        <camel.version>2.21.3</camel.version>
 
         <!--test-->
         <mockito.version>2.19.0</mockito.version>

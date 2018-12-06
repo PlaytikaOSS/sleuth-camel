@@ -27,8 +27,6 @@ package com.playtika.sleuth.camel;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.management.event.ExchangeCompletedEvent;
-import org.apache.camel.management.event.ExchangeCreatedEvent;
-import org.apache.camel.management.event.ExchangeFailedEvent;
 import org.apache.camel.management.event.ExchangeSentEvent;
 import org.junit.After;
 import org.junit.Test;
@@ -45,7 +43,6 @@ import java.util.EventObject;
 import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
 import static java.util.Collections.emptyMap;
 import static java.util.Collections.singletonMap;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -66,7 +63,7 @@ public class SentEventNotifierTest {
 
     @Test
     public void shouldProceedRemoteSpan() {
-        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
         Span currentSpan = mock(Span.class);
         Span spanToSend = mock(Span.class);
         Span.SpanBuilder spanBuilder = mock(Span.SpanBuilder.class);
@@ -88,7 +85,7 @@ public class SentEventNotifierTest {
 
     @Test
     public void shouldProceedLocalSpan() {
-        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
         Span currentSpan = mock(Span.class);
 
         when(tracer.isTracing()).thenReturn(true);
@@ -108,7 +105,7 @@ public class SentEventNotifierTest {
         RuntimeException exception = new RuntimeException("exception message");
         Exchange mock = mock(Exchange.class);
         Span currentSpan = mock(Span.class);
-        EventObject event = new ExchangeCreatedEvent(mock);
+        EventObject event = new ExchangeCompletedEvent(mock);
 
         when(tracer.isTracing()).thenReturn(true);
         when(tracer.getCurrentSpan()).thenReturn(currentSpan);
@@ -146,7 +143,7 @@ public class SentEventNotifierTest {
 
     @Test
     public void shouldNotProceedIfSpanNotFromCamel() {
-        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
         Span currentSpan = mock(Span.class);
 
         when(tracer.isTracing()).thenReturn(true);
@@ -160,7 +157,7 @@ public class SentEventNotifierTest {
 
     @Test
     public void shouldNotProceedIfNotTracing() {
-        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
 
         when(tracer.isTracing()).thenReturn(false);
 
@@ -168,35 +165,8 @@ public class SentEventNotifierTest {
     }
 
     @Test
-    public void shouldNotBeEnabledInCaseOfCreatedEvent() {
-        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
-
-        boolean result = sentEventNotifier.isEnabled(event);
-
-        assertFalse(result);
-    }
-
-    @Test
-    public void shouldBeEnabledInCaseOfSentEvent() {
-        EventObject event = new ExchangeSentEvent(mock(Exchange.class), null, 100);
-
-        boolean result = sentEventNotifier.isEnabled(event);
-
-        assertTrue(result);
-    }
-
-    @Test
-    public void shouldBeEnabledInCaseOfCompletedEvent() {
-        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
-
-        boolean result = sentEventNotifier.isEnabled(event);
-
-        assertTrue(result);
-    }
-
-    @Test
-    public void shouldBeEnabledInCaseOfFailedEvent() {
-        EventObject event = new ExchangeFailedEvent(mock(Exchange.class));
+    public void shouldBeEnabled() {
+        EventObject event = new EventObject(mock(Exchange.class));
 
         boolean result = sentEventNotifier.isEnabled(event);
 

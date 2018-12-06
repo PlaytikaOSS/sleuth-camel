@@ -43,8 +43,11 @@ import static org.apache.camel.LoggingLevel.INFO;
 public class TestApp {
 
     static final String DIRECT_ROUTE_URI = "direct:directRoute";
+    static final String ASYNC_DIRECT_ROUTE_URI = "direct:asyncDirectRoute";
     static final String MOCK_DIRECT_ROUTE_TO_URI = "mock:directRouteTo";
     static final String MOCK_EXCEPTION_ROUTE_TO_URI = "mock:exceptionRouteTo";
+    static final String DIRECT_ROUTE_ID = "directRoute";
+    static final String ASYNC_DIRECT_ROUTE_ID = "asyncDirectRoute";
 
     @Bean
     public Sampler alwaysSampler() {
@@ -66,7 +69,6 @@ public class TestApp {
         return new RouteBuilder() {
             @Override
             public void configure() {
-
                 onException(RuntimeException.class)
                         .log(INFO, "Exception caught. Processing fallback...")
                         .to(MOCK_EXCEPTION_ROUTE_TO_URI)
@@ -77,7 +79,15 @@ public class TestApp {
                         .process(mockProcessor)
                         .process(exchange -> someTracedService.newSpanMethod())
                         .to(MOCK_DIRECT_ROUTE_TO_URI)
-                        .routeId("directRoute");
+                        .routeId(DIRECT_ROUTE_ID);
+
+                from(ASYNC_DIRECT_ROUTE_URI)
+                        .log(INFO, "Message is going to be processed in async way...")
+                        .process(mockProcessor)
+                        .process(exchange -> someTracedService.newSpanMethod())
+                        .threads()
+                        .to(MOCK_DIRECT_ROUTE_TO_URI)
+                        .routeId(ASYNC_DIRECT_ROUTE_ID);
             }
         };
     }

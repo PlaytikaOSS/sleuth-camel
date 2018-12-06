@@ -67,6 +67,9 @@ public class FunctionalTest {
     @Produce(uri = DIRECT_ROUTE_URI)
     private ProducerTemplate directRouteProducer;
 
+    @Produce(uri = ASYNC_DIRECT_ROUTE_URI)
+    private ProducerTemplate asyncDirectRouteProducer;
+
     @EndpointInject(uri = MOCK_DIRECT_ROUTE_TO_URI)
     private MockEndpoint directRouteMockEndpoint;
 
@@ -98,10 +101,19 @@ public class FunctionalTest {
 
     @Test
     public void shouldSendToRouteWithoutTracing() throws Exception {
+        assertSentToRouteWithoutTracing(directRouteProducer, DIRECT_ROUTE_ID);
+    }
+
+    @Test
+    public void shouldSendToRouteWithoutTracingToAsyncRoute() throws Exception {
+        assertSentToRouteWithoutTracing(asyncDirectRouteProducer, ASYNC_DIRECT_ROUTE_ID);
+    }
+
+    private void assertSentToRouteWithoutTracing(ProducerTemplate routeProducer, String route) throws InterruptedException {
         directRouteMockEndpoint.expectedMessageCount(1);
         directRouteMockEndpoint.expectedBodiesReceived(TEST_BODY);
 
-        directRouteProducer.sendBody(TEST_BODY);
+        routeProducer.sendBody(TEST_BODY);
 
         directRouteMockEndpoint.assertIsSatisfied();
 
@@ -114,7 +126,7 @@ public class FunctionalTest {
         assertThat(headers.get(TraceMessageHeaders.SPAN_ID_NAME)).isNotNull();
         assertThat(headers.get(TraceMessageHeaders.TRACE_ID_NAME)).isNotNull();
         assertThat(headers.get(TraceMessageHeaders.SAMPLED_NAME)).isEqualTo("1");
-        assertThat(headers.get(TraceMessageHeaders.SPAN_NAME_NAME)).isEqualTo("camel::direct://directRoute");
+        assertThat(headers.get(TraceMessageHeaders.SPAN_NAME_NAME)).isEqualTo("camel::direct://" + route);
 
         //assert span logs
         assertAccumulatedSpansAndLogsForTestingSpan(Span.CLIENT_SEND, Span.CLIENT_RECV);
@@ -122,12 +134,21 @@ public class FunctionalTest {
 
     @Test
     public void shouldSendToRouteWithExistingSpan() throws Exception {
+        assertSentToRouteWithExistingSpan(directRouteProducer, DIRECT_ROUTE_ID);
+    }
+
+    @Test
+    public void shouldSendToRouteWithExistingSpanToAsyncRoute() throws Exception {
+        assertSentToRouteWithExistingSpan(asyncDirectRouteProducer, ASYNC_DIRECT_ROUTE_ID);
+    }
+
+    private void assertSentToRouteWithExistingSpan(ProducerTemplate routeProducer, String route) throws Exception {
         existingSpan = tracer.createSpan("existingSpan");
 
         directRouteMockEndpoint.expectedMessageCount(1);
         directRouteMockEndpoint.expectedBodiesReceived(TEST_BODY);
 
-        directRouteProducer.sendBody(TEST_BODY);
+        routeProducer.sendBody(TEST_BODY);
 
         directRouteMockEndpoint.assertIsSatisfied();
 
@@ -142,7 +163,7 @@ public class FunctionalTest {
         assertThat(headers.get(TraceMessageHeaders.TRACE_ID_NAME)).isEqualTo(existingSpan.traceIdString());
         assertThat(headers.get(TraceMessageHeaders.PARENT_ID_NAME)).isEqualTo(Span.idToHex(existingSpan.getSpanId()));
         assertThat(headers.get(TraceMessageHeaders.SAMPLED_NAME)).isEqualTo("1");
-        assertThat(headers.get(TraceMessageHeaders.SPAN_NAME_NAME)).isEqualTo("camel::direct://directRoute");
+        assertThat(headers.get(TraceMessageHeaders.SPAN_NAME_NAME)).isEqualTo("camel::direct://" + route);
 
         //assert span logs
         assertAccumulatedSpansAndLogsForTestingSpan(Span.CLIENT_SEND, Span.CLIENT_RECV);
@@ -152,6 +173,15 @@ public class FunctionalTest {
 
     @Test
     public void shouldSendToRouteWithSpanInHeaders() throws Exception {
+        assertSentToRouteWithSpanInHeaders(directRouteProducer);
+    }
+
+    @Test
+    public void shouldSendToRouteWithSpanInHeadersToAsyncRoute() throws Exception {
+        assertSentToRouteWithSpanInHeaders(asyncDirectRouteProducer);
+    }
+
+    private void assertSentToRouteWithSpanInHeaders(ProducerTemplate routeProducer) throws Exception {
         directRouteMockEndpoint.expectedMessageCount(1);
         directRouteMockEndpoint.expectedBodiesReceived(TEST_BODY);
 
@@ -166,7 +196,7 @@ public class FunctionalTest {
         incomingMessageHeaders.put(TraceMessageHeaders.SAMPLED_NAME, sampled);
         incomingMessageHeaders.put(TraceMessageHeaders.SPAN_NAME_NAME, spanName);
 
-        directRouteProducer.sendBodyAndHeaders(TEST_BODY, incomingMessageHeaders);
+        routeProducer.sendBodyAndHeaders(TEST_BODY, incomingMessageHeaders);
 
         directRouteMockEndpoint.assertIsSatisfied();
 
@@ -189,6 +219,15 @@ public class FunctionalTest {
 
     @Test
     public void shouldSendFailureSpan() throws Exception {
+        assertFailureSpanSent(directRouteProducer, DIRECT_ROUTE_ID);
+    }
+
+    @Test
+    public void shouldSendFailureSpanToAsyncRoute() throws Exception {
+        assertFailureSpanSent(asyncDirectRouteProducer, ASYNC_DIRECT_ROUTE_ID);
+    }
+
+    private void assertFailureSpanSent(ProducerTemplate routeProducer, String routeName) throws Exception {
         String errorMessage = "Something went wrong";
 
         directRouteMockEndpoint.expectedMessageCount(0);
@@ -198,7 +237,7 @@ public class FunctionalTest {
         doThrow(new RuntimeException(errorMessage)).when(mockProcessor).process(any(Exchange.class));
 
         //test
-        assertThatThrownBy(() -> directRouteProducer.sendBody(TEST_BODY))
+        assertThatThrownBy(() -> routeProducer.sendBody(TEST_BODY))
                 .isInstanceOf(CamelExecutionException.class);
 
         directRouteMockEndpoint.assertIsSatisfied();
@@ -213,7 +252,7 @@ public class FunctionalTest {
         assertThat(headers.get(TraceMessageHeaders.SPAN_ID_NAME)).isNotNull();
         assertThat(headers.get(TraceMessageHeaders.TRACE_ID_NAME)).isNotNull();
         assertThat(headers.get(TraceMessageHeaders.SAMPLED_NAME)).isEqualTo("1");
-        assertThat(headers.get(TraceMessageHeaders.SPAN_NAME_NAME)).isEqualTo("camel::direct://directRoute");
+        assertThat(headers.get(TraceMessageHeaders.SPAN_NAME_NAME)).isEqualTo("camel::direct://" + routeName);
 
         //assert span logs
         Span span = getSingleAccumulatedSpan();

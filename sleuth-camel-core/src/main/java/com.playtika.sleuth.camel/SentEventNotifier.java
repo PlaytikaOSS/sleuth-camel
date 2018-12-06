@@ -50,6 +50,10 @@ public class SentEventNotifier extends EventNotifierSupport {
 
     @Override
     public void notify(EventObject event) {
+        if (!(event instanceof ExchangeFailedEvent) && !(event instanceof ExchangeCompletedEvent) && !(event instanceof ExchangeSentEvent)) {
+            return;
+        }
+
         log.trace("Caught an event [{} - {}] - processing...", event.getClass().getSimpleName(), event);
         if (!tracer.isTracing()) {
             log.debug("Skipping event [{}] since it's not tracing...", event);
@@ -111,7 +115,7 @@ public class SentEventNotifier extends EventNotifierSupport {
 
     @Override
     public boolean isEnabled(EventObject event) {
-        return event instanceof ExchangeFailedEvent || event instanceof ExchangeCompletedEvent || event instanceof ExchangeSentEvent;
+        return true;
     }
 }
 
