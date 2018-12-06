@@ -7,7 +7,7 @@
     <groupId>com.playtika.sleuth</groupId>
     <artifactId>sleuth-camel</artifactId>
     <packaging>pom</packaging>
-    <version>1.0.1-SNAPSHOT</version>
+    <version>1.0.1</version>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
