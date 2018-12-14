@@ -24,6 +24,10 @@
 
 package com.playtika.sleuth.camel;
 
+import brave.ErrorParser;
+import brave.Span;
+import brave.Tracer;
+import brave.propagation.ThreadLocalSpan;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.camel.Exchange;
@@ -32,20 +36,20 @@ import org.apache.camel.management.event.ExchangeCompletedEvent;
 import org.apache.camel.management.event.ExchangeFailedEvent;
 import org.apache.camel.management.event.ExchangeSentEvent;
 import org.apache.camel.support.EventNotifierSupport;
-import org.springframework.cloud.sleuth.ErrorParser;
-import org.springframework.cloud.sleuth.Span;
-import org.springframework.cloud.sleuth.Tracer;
 
 import java.util.EventObject;
 import java.util.Objects;
 
-import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
+import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
 
 @Slf4j
 @AllArgsConstructor
 public class SentEventNotifier extends EventNotifierSupport {
 
+    public static final String EXCHANGE_EVENT_SENT_ANNOTATION = "camel-exchange-event-sent";
+
     private final Tracer tracer;
+    private final ThreadLocalSpan threadLocalSpan;
     private final ErrorParser errorParser;
 
     @Override
@@ -55,13 +59,14 @@ public class SentEventNotifier extends EventNotifierSupport {
         }
 
         log.trace("Caught an event [{} - {}] - processing...", event.getClass().getSimpleName(), event);
-        if (!tracer.isTracing()) {
+        Span currentSpan = tracer.currentSpan();
+        if (currentSpan == null) {
             log.debug("Skipping event [{}] since it's not tracing...", event);
             return;
         }
 
-        Span currentSpan = tracer.getCurrentSpan();
-        if (!isCamelSpan(currentSpan)) {
+        Exchange exchange = ((AbstractExchangeEvent) event).getExchange();
+        if (!isCamelSpan(exchange)) {
             log.debug("Skipping span {}, since it's not camel one.", currentSpan);
             return;
         }
@@ -71,24 +76,18 @@ public class SentEventNotifier extends EventNotifierSupport {
             return;
         }
 
-        if (currentSpan.isRemote()) {
-            log.debug("Span {} is remote log :ss: event.", currentSpan);
-            currentSpan.logEvent(Span.SERVER_SEND);
-            //need to be unset as remote in order to be sent for collection
-            currentSpan = currentSpan.toBuilder().remote(false).build();
-        } else {
-            log.debug("Span {} is not remote log :cr: event.", currentSpan);
-            currentSpan.logEvent(Span.CLIENT_RECV);
-        }
+        exchange.removeProperty(EXCHANGE_IS_TRACED_BY_BRAVE);
 
-        logExceptionIfExists(event, currentSpan);
-
-        tracer.close(currentSpan);
-        log.debug("Span {} successfully closed.", currentSpan);
+        Span spanToFinish = threadLocalSpan.remove();
+        logExceptionIfExists(event, spanToFinish);
+        spanToFinish.annotate(EXCHANGE_EVENT_SENT_ANNOTATION);
+        spanToFinish.finish();
+        log.debug("Span {} successfully closed.", spanToFinish);
     }
 
-    private boolean isCamelSpan(Span span) {
-        return span.tags().containsKey(FROM_CAMEL);
+    private boolean isCamelSpan(Exchange exchange) {
+        Boolean isTracing = exchange.getProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.class);
+        return isTracing == null ? false : isTracing;
     }
 
     /**
@@ -109,7 +108,7 @@ public class SentEventNotifier extends EventNotifierSupport {
         AbstractExchangeEvent abstractExchangeEvent = (AbstractExchangeEvent) event;
         Exception exception = abstractExchangeEvent.getExchange().getException();
         if (exception != null) {
-            errorParser.parseErrorTags(span, exception);
+            errorParser.error(exception, span);
         }
     }
 

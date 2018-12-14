@@ -29,6 +29,6 @@ import lombok.experimental.UtilityClass;
 @UtilityClass
 public class SleuthCamelConstants {
 
-    public static final String FROM_CAMEL = "camel_span";
+    public static final String EXCHANGE_IS_TRACED_BY_BRAVE = "ExchangeIsInTracingContext";
 
 }

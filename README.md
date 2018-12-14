@@ -11,7 +11,7 @@
 
 
 # Sleuth-camel library
-If you are using camel along with spring boot 1.5.x version and willing to have your routes to be traced - this library is what you need.
+If you are using camel along with spring boot and willing to have your routes to be traced - this library is what you need.
 
 ## Usage
 In order to integrate functionality provided by this library tou need to add following dependency:
@@ -27,3 +27,5 @@ If for some reason integration should be disabled - just add following property:
 ```properties
 spring.sleuth.camel.enabled=false
 ```
+
+For boot 1.5.x use 1.x version, for Spring boot 2.x.x version - sleuth-camel-core 2.x version should be used.

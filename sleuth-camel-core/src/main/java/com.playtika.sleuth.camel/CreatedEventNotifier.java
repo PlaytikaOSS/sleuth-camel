@@ -24,32 +24,39 @@
 
 package com.playtika.sleuth.camel;
 
-import lombok.AllArgsConstructor;
+import brave.Span;
+import brave.Tracing;
+import brave.propagation.ThreadLocalSpan;
+import brave.propagation.TraceContext;
+import brave.propagation.TraceContextOrSamplingFlags;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
+import org.apache.camel.Message;
 import org.apache.camel.management.event.ExchangeCreatedEvent;
 import org.apache.camel.support.EventNotifierSupport;
-import org.springframework.cloud.sleuth.Span;
-import org.springframework.cloud.sleuth.SpanTextMap;
-import org.springframework.cloud.sleuth.Tracer;
-import org.springframework.cloud.sleuth.instrument.messaging.MessagingSpanTextMapExtractor;
-import org.springframework.cloud.sleuth.instrument.messaging.MessagingSpanTextMapInjector;
 import org.springframework.cloud.sleuth.util.SpanNameUtil;
 
 import java.util.EventObject;
 
-import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
+import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
 
 @Slf4j
-@AllArgsConstructor
 public class CreatedEventNotifier extends EventNotifierSupport {
 
+    static final String EXCHANGE_EVENT_CREATED_ANNOTATION = "camel-exchange-event-created";
+    static final String EXCHANGE_ID_TAG_ANNOTATION = "camel-exchange-id";
     private static final String MESSAGE_COMPONENT = "camel";
 
-    private final Tracer tracer;
-    private final MessagingSpanTextMapExtractor spanExtractor;
-    private final MessagingSpanTextMapInjector spanInjector;
+    private final ThreadLocalSpan threadLocalSpan;
+    private final TraceContext.Injector<Message> injector;
+    private final TraceContext.Extractor<Message> extractor;
+
+    public CreatedEventNotifier(Tracing tracing, ThreadLocalSpan threadLocalSpan) {
+        this.threadLocalSpan = threadLocalSpan;
+        this.injector = tracing.propagation().injector(Message::setHeader);
+        this.extractor = tracing.propagation().extractor((carrier, key) -> carrier.getHeader(key, String.class));
+    }
 
     @Override
     public void notify(EventObject event) {
@@ -57,43 +64,25 @@ public class CreatedEventNotifier extends EventNotifierSupport {
         ExchangeCreatedEvent exchangeCreatedEvent = (ExchangeCreatedEvent) event;
         Exchange exchange = exchangeCreatedEvent.getExchange();
         Endpoint endpoint = exchange.getFromEndpoint();
-        CamelMessageTextMap carrier = new CamelMessageTextMap(exchange.getIn());
+        Message message = exchange.getIn();
+        TraceContextOrSamplingFlags extractedContext = extractor.extract(message);
 
-        Span span = getSpan(carrier, endpoint);
-        span.tag(FROM_CAMEL, "true");
+        Span span = threadLocalSpan.next(extractedContext);
+        String spanName = getSpanName(endpoint);
+        span.name(spanName);
+        span.start();
 
-        spanInjector.inject(span, carrier);
-    }
+        span.annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);
+        span.tag(EXCHANGE_ID_TAG_ANNOTATION, exchange.getExchangeId());
 
-    private Span getSpan(CamelMessageTextMap carrier, Endpoint endpoint) {
-        log.trace("Getting span for [{}] from endpoint [{}]...", carrier, endpoint);
-        Span spanFromMessage = buildSpan(carrier);
-        if (spanFromMessage != null) {
-            log.debug("Built span from message - {} from endpoint {}. Assuming it is remote one. Continuing it...",
-                    spanFromMessage, endpoint);
-            tracer.continueSpan(spanFromMessage);
-            spanFromMessage.logEvent(Span.SERVER_RECV);
-            return spanFromMessage;
-        } else {
-            String name = getSpanName(endpoint);
-            Span newSpan = tracer.createSpan(name);
-            newSpan.logEvent(Span.CLIENT_SEND);
-            log.debug("Message doesn't contain span data, new one was created - {} for endpoint.", newSpan, endpoint);
-            return newSpan;
-        }
+        exchange.setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
+
+        log.debug("Created/continued span [{}]", span);
+        injector.inject(span.context(), message);
     }
 
     private String getSpanName(Endpoint endpoint) {
         return SpanNameUtil.shorten(MESSAGE_COMPONENT + "::" + endpoint.getEndpointKey());
-    }
-
-    private Span buildSpan(SpanTextMap carrier) {
-        try {
-            return this.spanExtractor.joinTrace(carrier);
-        } catch (Exception e) {
-            log.error("Exception occurred while trying to extract span from carrier.", e);
-            return null;
-        }
     }
 
     @Override

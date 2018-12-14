@@ -24,15 +24,14 @@
 
 package com.playtika.sleuth.camel.functional;
 
+import brave.sampler.Sampler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.camel.Processor;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
-import org.springframework.cloud.sleuth.Sampler;
 import org.springframework.cloud.sleuth.annotation.NewSpan;
-import org.springframework.cloud.sleuth.sampler.AlwaysSampler;
-import org.springframework.cloud.sleuth.util.ArrayListSpanAccumulator;
+import org.springframework.cloud.sleuth.util.ArrayListSpanReporter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -46,17 +45,17 @@ public class TestApp {
     static final String ASYNC_DIRECT_ROUTE_URI = "direct:asyncDirectRoute";
     static final String MOCK_DIRECT_ROUTE_TO_URI = "mock:directRouteTo";
     static final String MOCK_EXCEPTION_ROUTE_TO_URI = "mock:exceptionRouteTo";
-    static final String DIRECT_ROUTE_ID = "directRoute";
-    static final String ASYNC_DIRECT_ROUTE_ID = "asyncDirectRoute";
+    static final String DIRECT_ROUTE_ID = "directroute";
+    static final String ASYNC_DIRECT_ROUTE_ID = "asyncdirectroute";
 
     @Bean
     public Sampler alwaysSampler() {
-        return new AlwaysSampler();
+        return Sampler.ALWAYS_SAMPLE;
     }
 
     @Bean
-    public ArrayListSpanAccumulator arrayListSpanAccumulator() {
-        return new ArrayListSpanAccumulator();
+    public ArrayListSpanReporter arrayListSpanAccumulator() {
+        return new ArrayListSpanReporter();
     }
 
     @Bean

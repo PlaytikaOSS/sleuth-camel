@@ -24,6 +24,10 @@
 
 package com.playtika.sleuth.camel;
 
+import brave.ErrorParser;
+import brave.Span;
+import brave.Tracer;
+import brave.propagation.ThreadLocalSpan;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.management.event.ExchangeCompletedEvent;
@@ -34,15 +38,11 @@ import org.junit.runner.RunWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
-import org.springframework.cloud.sleuth.ErrorParser;
-import org.springframework.cloud.sleuth.Span;
-import org.springframework.cloud.sleuth.Tracer;
 
 import java.util.EventObject;
 
-import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
-import static java.util.Collections.emptyMap;
-import static java.util.Collections.singletonMap;
+import static com.playtika.sleuth.camel.SentEventNotifier.EXCHANGE_EVENT_SENT_ANNOTATION;
+import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.*;
 
@@ -53,6 +53,9 @@ public class SentEventNotifierTest {
     private Tracer tracer;
     @Mock
     private ErrorParser errorParser;
+    @Mock
+    private ThreadLocalSpan threadLocalSpan;
+
     @InjectMocks
     private SentEventNotifier sentEventNotifier;
 
@@ -63,62 +66,44 @@ public class SentEventNotifierTest {
 
     @Test
     public void shouldProceedRemoteSpan() {
-        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
+        Exchange exchange = mock(Exchange.class);
+        EventObject event = new ExchangeCompletedEvent(exchange);
         Span currentSpan = mock(Span.class);
         Span spanToSend = mock(Span.class);
-        Span.SpanBuilder spanBuilder = mock(Span.SpanBuilder.class);
 
-        when(tracer.isTracing()).thenReturn(true);
-        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
-        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
-        when(currentSpan.isRemote()).thenReturn(true);
-        when(currentSpan.toBuilder()).thenReturn(spanBuilder);
-        when(spanBuilder.remote(false)).thenReturn(spanBuilder);
-        when(spanBuilder.build()).thenReturn(spanToSend);
+        when(tracer.currentSpan()).thenReturn(currentSpan);
+        when(threadLocalSpan.remove()).thenReturn(spanToSend);
+        when(exchange.getException()).thenReturn(null);
+        when(exchange.getProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.class)).thenReturn(Boolean.TRUE);
 
         sentEventNotifier.notify(event);
 
-        verify(currentSpan).logEvent(Span.SERVER_SEND);
-        verify(tracer).close(spanToSend);
+        verify(exchange).removeProperty(EXCHANGE_IS_TRACED_BY_BRAVE);
+        verify(spanToSend).annotate(EXCHANGE_EVENT_SENT_ANNOTATION);
+        verify(spanToSend).finish();
         verifyNoMoreInteractions(currentSpan, spanToSend);
     }
 
     @Test
-    public void shouldProceedLocalSpan() {
-        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
-        Span currentSpan = mock(Span.class);
-
-        when(tracer.isTracing()).thenReturn(true);
-        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
-        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
-        when(currentSpan.isRemote()).thenReturn(false);
-
-        sentEventNotifier.notify(event);
-
-        verify(currentSpan).logEvent(Span.CLIENT_RECV);
-        verify(tracer).close(currentSpan);
-        verifyNoMoreInteractions(currentSpan);
-    }
-
-    @Test
     public void shouldProceedWithFailureMessage() {
-        RuntimeException exception = new RuntimeException("exception message");
-        Exchange mock = mock(Exchange.class);
+        Exchange exchange = mock(Exchange.class);
+        EventObject event = new ExchangeCompletedEvent(exchange);
         Span currentSpan = mock(Span.class);
-        EventObject event = new ExchangeCompletedEvent(mock);
+        Span spanToSend = mock(Span.class);
+        RuntimeException exception = new RuntimeException("some error");
 
-        when(tracer.isTracing()).thenReturn(true);
-        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
-        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
-        when(currentSpan.isRemote()).thenReturn(false);
-        when(mock.getException()).thenReturn(exception);
+        when(tracer.currentSpan()).thenReturn(currentSpan);
+        when(threadLocalSpan.remove()).thenReturn(spanToSend);
+        when(exchange.getException()).thenReturn(exception);
+        when(exchange.getProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.class)).thenReturn(Boolean.TRUE);
 
         sentEventNotifier.notify(event);
 
-        verify(currentSpan).logEvent(Span.CLIENT_RECV);
-        verify(tracer).close(currentSpan);
-        verify(errorParser).parseErrorTags(currentSpan, exception);
-        verifyNoMoreInteractions(currentSpan);
+        verify(exchange).removeProperty(EXCHANGE_IS_TRACED_BY_BRAVE);
+        verify(errorParser).error(exception, spanToSend);
+        verify(spanToSend).annotate(EXCHANGE_EVENT_SENT_ANNOTATION);
+        verify(spanToSend).finish();
+        verifyNoMoreInteractions(currentSpan, spanToSend);
     }
 
     @Test
@@ -129,9 +114,8 @@ public class SentEventNotifierTest {
         Span currentSpan = mock(Span.class);
         EventObject event = new ExchangeSentEvent(exchange, eventEndpoint, 0);
 
-        when(tracer.isTracing()).thenReturn(true);
-        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
-        when(currentSpan.tags()).thenReturn(singletonMap(FROM_CAMEL, "true"));
+        when(tracer.currentSpan()).thenReturn(currentSpan);
+        when(exchange.getProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.class)).thenReturn(Boolean.TRUE);
         when(exchange.getFromEndpoint()).thenReturn(exchangeEndpoint);
         when(eventEndpoint.getEndpointKey()).thenReturn("direct:/test1");
         when(exchangeEndpoint.getEndpointKey()).thenReturn("direct:/test2");
@@ -143,12 +127,12 @@ public class SentEventNotifierTest {
 
     @Test
     public void shouldNotProceedIfSpanNotFromCamel() {
-        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
+        Exchange exchange = mock(Exchange.class);
+        EventObject event = new ExchangeCompletedEvent(exchange);
         Span currentSpan = mock(Span.class);
 
-        when(tracer.isTracing()).thenReturn(true);
-        when(tracer.getCurrentSpan()).thenReturn(currentSpan);
-        when(currentSpan.tags()).thenReturn(emptyMap());
+        when(tracer.currentSpan()).thenReturn(currentSpan);
+        when(exchange.getProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.class)).thenReturn(Boolean.FALSE);
 
         sentEventNotifier.notify(event);
 
@@ -159,7 +143,7 @@ public class SentEventNotifierTest {
     public void shouldNotProceedIfNotTracing() {
         EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
 
-        when(tracer.isTracing()).thenReturn(false);
+        when(tracer.currentSpan()).thenReturn(null);
 
         sentEventNotifier.notify(event);
     }
