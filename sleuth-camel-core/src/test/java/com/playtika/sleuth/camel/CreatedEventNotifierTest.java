@@ -24,42 +24,59 @@
 
 package com.playtika.sleuth.camel;
 
+import brave.Span;
+import brave.Tracing;
+import brave.propagation.Propagation;
+import brave.propagation.ThreadLocalSpan;
+import brave.propagation.TraceContext;
+import brave.propagation.TraceContextOrSamplingFlags;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
 import org.apache.camel.management.event.ExchangeCreatedEvent;
 import org.apache.camel.management.event.ExchangeSentEvent;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
-import org.springframework.cloud.sleuth.Span;
-import org.springframework.cloud.sleuth.SpanTextMap;
-import org.springframework.cloud.sleuth.Tracer;
-import org.springframework.cloud.sleuth.instrument.messaging.MessagingSpanTextMapExtractor;
-import org.springframework.cloud.sleuth.instrument.messaging.MessagingSpanTextMapInjector;
 
 import java.util.EventObject;
 
-import static com.playtika.sleuth.camel.SleuthCamelConstants.FROM_CAMEL;
+import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_EVENT_CREATED_ANNOTATION;
+import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_ID_TAG_ANNOTATION;
+import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 @RunWith(MockitoJUnitRunner.StrictStubs.class)
 public class CreatedEventNotifierTest {
 
     @Mock
-    private Tracer tracer;
+    private ThreadLocalSpan threadLocalSpan;
     @Mock
-    private MessagingSpanTextMapExtractor spanExtractor;
+    private Tracing tracing;
     @Mock
-    private MessagingSpanTextMapInjector spanInjector;
+    private Propagation<String> propagation;
 
-    @InjectMocks
+    @Mock
+    private TraceContext.Injector<Message> injector;
+    @Mock
+    private TraceContext.Extractor<Message> extractor;
+    @Mock
+    private TraceContextOrSamplingFlags extractedContext;
+
     private CreatedEventNotifier notifier;
+
+    @Before
+    public void setUp() {
+        when(tracing.propagation()).thenReturn(propagation);
+        when(propagation.extractor(any(Propagation.Getter.class))).thenReturn(extractor);
+        when(propagation.injector(any(Propagation.Setter.class))).thenReturn(injector);
+
+        notifier = new CreatedEventNotifier(tracing, threadLocalSpan);
+    }
 
     @Test
     public void shouldCreateRemoteSpanFromMessage() {
@@ -67,66 +84,31 @@ public class CreatedEventNotifierTest {
         Exchange exchange = mock(Exchange.class);
         Endpoint endpoint = mock(Endpoint.class);
         Message message = mock(Message.class);
-        Span builtSpan = mock(Span.class);
+        Span span = mock(Span.class);
+        TraceContext traceContext = mock(TraceContext.class);
+        String someExchangeId = "some exchange Id";
+        String endpointKet = "camelDirectRoute";
 
         when(event.getExchange()).thenReturn(exchange);
         when(exchange.getFromEndpoint()).thenReturn(endpoint);
         when(exchange.getIn()).thenReturn(message);
-        when(spanExtractor.joinTrace(any(SpanTextMap.class))).thenReturn(builtSpan);
+        when(exchange.getExchangeId()).thenReturn(someExchangeId);
+        when(endpoint.getEndpointKey()).thenReturn(endpointKet);
+
+        when(extractor.extract(message)).thenReturn(extractedContext);
+        when(threadLocalSpan.next(extractedContext)).thenReturn(span);
+        when(span.context()).thenReturn(traceContext);
 
         notifier.notify(event);
 
-        verify(tracer).continueSpan(builtSpan);
-        verify(builtSpan).logEvent(Span.SERVER_RECV);
-        verify(builtSpan).tag(FROM_CAMEL, "true");
-        verify(spanInjector).inject(eq(builtSpan), any(SpanTextMap.class));
-        verifyNoMoreInteractions(tracer, spanExtractor, spanInjector);
-    }
+        verify(span).name("camel::" + endpointKet);
+        verify(span).start();
+        verify(span).annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);
+        verify(span).tag(EXCHANGE_ID_TAG_ANNOTATION, exchange.getExchangeId());
+        verify(exchange).setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
+        verify(injector).inject(traceContext, message);
 
-    @Test
-    public void shouldCreateNewSpanInCaseMessageMissingSpanData() {
-        ExchangeCreatedEvent event = mock(ExchangeCreatedEvent.class);
-        Exchange exchange = mock(Exchange.class);
-        Endpoint endpoint = mock(Endpoint.class);
-        Message message = mock(Message.class);
-        Span newSpan = mock(Span.class);
-
-        when(event.getExchange()).thenReturn(exchange);
-        when(exchange.getFromEndpoint()).thenReturn(endpoint);
-        when(exchange.getIn()).thenReturn(message);
-        when(spanExtractor.joinTrace(any(SpanTextMap.class))).thenReturn(null);
-        when(endpoint.getEndpointKey()).thenReturn("direct://someRoute");
-        when(tracer.createSpan("camel::direct://someRoute")).thenReturn(newSpan);
-
-        notifier.notify(event);
-
-        verify(newSpan).logEvent(Span.CLIENT_SEND);
-        verify(newSpan).tag(FROM_CAMEL, "true");
-        verify(spanInjector).inject(eq(newSpan), any(SpanTextMap.class));
-        verifyNoMoreInteractions(tracer, spanExtractor, spanInjector);
-    }
-
-    @Test
-    public void shouldCreateNewSpanInCaseExtractorThrowException() {
-        ExchangeCreatedEvent event = mock(ExchangeCreatedEvent.class);
-        Exchange exchange = mock(Exchange.class);
-        Endpoint endpoint = mock(Endpoint.class);
-        Message message = mock(Message.class);
-        Span newSpan = mock(Span.class);
-
-        when(event.getExchange()).thenReturn(exchange);
-        when(exchange.getFromEndpoint()).thenReturn(endpoint);
-        when(exchange.getIn()).thenReturn(message);
-        when(spanExtractor.joinTrace(any(SpanTextMap.class))).thenThrow(new RuntimeException("Something went wrong"));
-        when(endpoint.getEndpointKey()).thenReturn("direct://someRoute");
-        when(tracer.createSpan("camel::direct://someRoute")).thenReturn(newSpan);
-
-        notifier.notify(event);
-
-        verify(newSpan).logEvent(Span.CLIENT_SEND);
-        verify(newSpan).tag(FROM_CAMEL, "true");
-        verify(spanInjector).inject(eq(newSpan), any(SpanTextMap.class));
-        verifyNoMoreInteractions(tracer, spanExtractor, spanInjector);
+        verifyNoMoreInteractions(tracing, threadLocalSpan, span);
     }
 
     @Test

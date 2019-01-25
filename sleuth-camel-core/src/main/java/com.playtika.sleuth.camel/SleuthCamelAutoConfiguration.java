@@ -24,6 +24,10 @@
 
 package com.playtika.sleuth.camel;
 
+import brave.ErrorParser;
+import brave.Tracer;
+import brave.Tracing;
+import brave.propagation.ThreadLocalSpan;
 import lombok.AllArgsConstructor;
 import org.apache.camel.CamelContext;
 import org.springframework.boot.autoconfigure.AutoConfigureAfter;
@@ -31,14 +35,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.cloud.sleuth.ErrorParser;
-import org.springframework.cloud.sleuth.TraceKeys;
-import org.springframework.cloud.sleuth.Tracer;
 import org.springframework.cloud.sleuth.autoconfig.TraceAutoConfiguration;
-import org.springframework.cloud.sleuth.instrument.messaging.HeaderBasedMessagingExtractor;
-import org.springframework.cloud.sleuth.instrument.messaging.HeaderBasedMessagingInjector;
-import org.springframework.cloud.sleuth.instrument.messaging.MessagingSpanTextMapExtractor;
-import org.springframework.cloud.sleuth.instrument.messaging.MessagingSpanTextMapInjector;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -54,29 +51,23 @@ public class SleuthCamelAutoConfiguration {
     private final Tracer tracer;
 
     @Bean
-    public CreatedEventNotifier createdEventNotifier(MessagingSpanTextMapExtractor messagingSpanExtractor,
-                                                     MessagingSpanTextMapInjector messagingSpanInjector) {
-        CreatedEventNotifier createdEventNotifier = new CreatedEventNotifier(tracer, messagingSpanExtractor, messagingSpanInjector);
+    @ConditionalOnMissingBean
+    public CreatedEventNotifier createdEventNotifier(Tracing tracing, ThreadLocalSpan threadLocalSpan) {
+        CreatedEventNotifier createdEventNotifier = new CreatedEventNotifier(tracing, threadLocalSpan);
         camelContext.getManagementStrategy().addEventNotifier(createdEventNotifier);
         return createdEventNotifier;
     }
 
     @Bean
-    public SentEventNotifier sentEventNotifier(ErrorParser errorParser) {
-        SentEventNotifier sentEventNotifier = new SentEventNotifier(tracer, errorParser);
+    @ConditionalOnMissingBean
+    public SentEventNotifier sentEventNotifier(ErrorParser errorParser, ThreadLocalSpan threadLocalSpan) {
+        SentEventNotifier sentEventNotifier = new SentEventNotifier(tracer, threadLocalSpan, errorParser);
         camelContext.getManagementStrategy().addEventNotifier(sentEventNotifier);
         return sentEventNotifier;
     }
 
     @Bean
-    public MessagingSpanTextMapExtractor messagingSpanExtractor() {
-        return new HeaderBasedMessagingExtractor();
+    public ThreadLocalSpan threadLocalSpan() {
+        return ThreadLocalSpan.create(this.tracer);
     }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public MessagingSpanTextMapInjector messagingSpanInjector(TraceKeys traceKeys) {
-        return new HeaderBasedMessagingInjector(traceKeys);
-    }
-
 }
