@@ -26,6 +26,7 @@ package com.playtika.sleuth.camel.functional;
 
 import brave.ScopedSpan;
 import brave.Tracer;
+import brave.propagation.B3SingleFormat;
 import org.apache.camel.*;
 import org.apache.camel.component.mock.MockEndpoint;
 import org.junit.After;
@@ -61,19 +62,20 @@ public class FunctionalTest {
     private static final String TRACE_ID_HEADER_NAME = "X-B3-TraceId";
     private static final String SAMPLED_ID_HEADER_NAME = "X-B3-Sampled";
     private static final String PARENT_ID_HEADER_BANE = "X-B3-ParentSpanId";
+    private static final String SINGLE_B3_HEADER_NAME = "b3";
 
     private static final Object TEST_BODY = "Some body";
 
-    @Produce(uri = DIRECT_ROUTE_URI)
+    @Produce(DIRECT_ROUTE_URI)
     private ProducerTemplate directRouteProducer;
 
-    @Produce(uri = ASYNC_DIRECT_ROUTE_URI)
+    @Produce(ASYNC_DIRECT_ROUTE_URI)
     private ProducerTemplate asyncDirectRouteProducer;
 
-    @EndpointInject(uri = MOCK_DIRECT_ROUTE_TO_URI)
+    @EndpointInject(MOCK_DIRECT_ROUTE_TO_URI)
     private MockEndpoint directRouteMockEndpoint;
 
-    @EndpointInject(uri = MOCK_EXCEPTION_ROUTE_TO_URI)
+    @EndpointInject(MOCK_EXCEPTION_ROUTE_TO_URI)
     private MockEndpoint exceptionRouteMockEndpoint;
 
     @Autowired
@@ -125,10 +127,8 @@ public class FunctionalTest {
 
         //assert message sent with span headers
         Map<String, Object> headers = getFirstMessageHeaders(directRouteMockEndpoint);
-        assertThat(headers.size()).isEqualTo(4);
-        assertThat(headers.get(SPAN_ID_HEADER_NAME)).isNotNull();
-        assertThat(headers.get(TRACE_ID_HEADER_NAME)).isNotNull();
-        assertThat(headers.get("X-B3-Sampled")).isEqualTo("1");
+        assertThat(headers.size()).isEqualTo(1);
+        assertThat(headers.get(SINGLE_B3_HEADER_NAME)).isNotNull();
 
         //assert span logs
         assertAccumulatedSpans(route);
@@ -146,6 +146,7 @@ public class FunctionalTest {
 
     private void assertSentToRouteWithExistingSpan(ProducerTemplate routeProducer, String route) throws Exception {
         existingSpan = tracer.startScopedSpan("existingSpan");
+        String spanString = B3SingleFormat.writeB3SingleFormat(existingSpan.context());
 
         directRouteMockEndpoint.expectedMessageCount(1);
         directRouteMockEndpoint.expectedBodiesReceived(TEST_BODY);
@@ -159,11 +160,10 @@ public class FunctionalTest {
 
         //assert message sent with span headers
         Map<String, Object> headers = getFirstMessageHeaders(directRouteMockEndpoint);
-        assertThat(headers.size()).isEqualTo(5);
-        assertThat(headers.get(SPAN_ID_HEADER_NAME)).isNotNull();
-        assertThat(headers.get(TRACE_ID_HEADER_NAME)).isEqualTo(Long.toHexString(existingSpan.context().traceId()));
-        assertThat(headers.get(SAMPLED_ID_HEADER_NAME)).isEqualTo("1");
-        assertThat(headers.get(PARENT_ID_HEADER_BANE)).isEqualTo(Long.toHexString(existingSpan.context().spanId()));
+        System.out.println("headers:" + headers);
+        assertThat(headers.size()).isEqualTo(1);
+        assertThat(headers.get(SINGLE_B3_HEADER_NAME)).isNotNull();
+        assertThat(headers.get(SINGLE_B3_HEADER_NAME)).isEqualTo(spanString);
 
         assertAccumulatedSpans(route);
 
@@ -189,9 +189,7 @@ public class FunctionalTest {
         String sampled = "1";
 
         Map<String, Object> incomingMessageHeaders = new HashMap<>();
-        incomingMessageHeaders.put(SPAN_ID_HEADER_NAME, spanId);
-        incomingMessageHeaders.put(TRACE_ID_HEADER_NAME, traceId);
-        incomingMessageHeaders.put(SAMPLED_ID_HEADER_NAME, sampled);
+        incomingMessageHeaders.put(SINGLE_B3_HEADER_NAME, spanId + "-" + traceId + "-" + sampled);
 
         routeProducer.sendBodyAndHeaders(TEST_BODY, incomingMessageHeaders);
 
@@ -202,10 +200,8 @@ public class FunctionalTest {
 
         //assert message sent with span headers
         Map<String, Object> headers = getFirstMessageHeaders(directRouteMockEndpoint);
-        assertThat(headers.size()).isEqualTo(5);
-        assertThat((String) headers.get(TRACE_ID_HEADER_NAME)).endsWith(traceId);
-        assertThat((String) headers.get(SAMPLED_ID_HEADER_NAME)).isEqualTo(sampled);
-        assertThat((String) headers.get(PARENT_ID_HEADER_BANE)).endsWith(spanId);
+        assertThat(headers.size()).isEqualTo(1);
+        assertThat((String) headers.get(SINGLE_B3_HEADER_NAME)).endsWith(sampled);
 
         //assert span logs
         assertAccumulatedSpans(route);
@@ -244,10 +240,8 @@ public class FunctionalTest {
 
         //assert message sent with span headers
         Map<String, Object> headers = getFirstMessageHeaders(exceptionRouteMockEndpoint);
-        assertThat(headers.size()).isGreaterThanOrEqualTo(4);
-        assertThat(headers.get(SPAN_ID_HEADER_NAME)).isNotNull();
-        assertThat(headers.get(TRACE_ID_HEADER_NAME)).isNotNull();
-        assertThat(headers.get(SAMPLED_ID_HEADER_NAME)).isEqualTo("1");
+        assertThat(headers.size()).isGreaterThanOrEqualTo(1);
+        assertThat(headers.get(SINGLE_B3_HEADER_NAME)).isNotNull();
 
         //assert span logs
         zipkin2.Span span = getSingleAccumulatedSpan();

@@ -30,8 +30,9 @@ import brave.Tracer;
 import brave.propagation.ThreadLocalSpan;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
-import org.apache.camel.management.event.ExchangeCompletedEvent;
-import org.apache.camel.management.event.ExchangeSentEvent;
+import org.apache.camel.impl.event.ExchangeCompletedEvent;
+import org.apache.camel.impl.event.ExchangeSentEvent;
+import org.apache.camel.spi.CamelEvent;
 import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -39,11 +40,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
-import java.util.EventObject;
-
 import static com.playtika.sleuth.camel.SentEventNotifier.EXCHANGE_EVENT_SENT_ANNOTATION;
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.*;
 
 @RunWith(MockitoJUnitRunner.StrictStubs.class)
@@ -67,7 +65,7 @@ public class SentEventNotifierTest {
     @Test
     public void shouldProceedRemoteSpan() {
         Exchange exchange = mock(Exchange.class);
-        EventObject event = new ExchangeCompletedEvent(exchange);
+        CamelEvent event = new ExchangeCompletedEvent(exchange);
         Span currentSpan = mock(Span.class);
         Span spanToSend = mock(Span.class);
 
@@ -87,7 +85,7 @@ public class SentEventNotifierTest {
     @Test
     public void shouldProceedWithFailureMessage() {
         Exchange exchange = mock(Exchange.class);
-        EventObject event = new ExchangeCompletedEvent(exchange);
+        CamelEvent event = new ExchangeCompletedEvent(exchange);
         Span currentSpan = mock(Span.class);
         Span spanToSend = mock(Span.class);
         RuntimeException exception = new RuntimeException("some error");
@@ -112,7 +110,7 @@ public class SentEventNotifierTest {
         Endpoint exchangeEndpoint = mock(Endpoint.class);
         Exchange exchange = mock(Exchange.class);
         Span currentSpan = mock(Span.class);
-        EventObject event = new ExchangeSentEvent(exchange, eventEndpoint, 0);
+        CamelEvent event = new ExchangeSentEvent(exchange, eventEndpoint, 0);
 
         when(tracer.currentSpan()).thenReturn(currentSpan);
         when(exchange.getProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.class)).thenReturn(Boolean.TRUE);
@@ -128,7 +126,7 @@ public class SentEventNotifierTest {
     @Test
     public void shouldNotProceedIfSpanNotFromCamel() {
         Exchange exchange = mock(Exchange.class);
-        EventObject event = new ExchangeCompletedEvent(exchange);
+        CamelEvent event = new ExchangeCompletedEvent(exchange);
         Span currentSpan = mock(Span.class);
 
         when(tracer.currentSpan()).thenReturn(currentSpan);
@@ -141,19 +139,11 @@ public class SentEventNotifierTest {
 
     @Test
     public void shouldNotProceedIfNotTracing() {
-        EventObject event = new ExchangeCompletedEvent(mock(Exchange.class));
+        CamelEvent event = new ExchangeCompletedEvent(mock(Exchange.class));
 
         when(tracer.currentSpan()).thenReturn(null);
 
         sentEventNotifier.notify(event);
     }
 
-    @Test
-    public void shouldBeEnabled() {
-        EventObject event = new EventObject(mock(Exchange.class));
-
-        boolean result = sentEventNotifier.isEnabled(event);
-
-        assertTrue(result);
-    }
 }

@@ -25,6 +25,7 @@
 package com.playtika.sleuth.camel;
 
 import brave.Span;
+import brave.Tracer;
 import brave.Tracing;
 import brave.propagation.Propagation;
 import brave.propagation.ThreadLocalSpan;
@@ -33,15 +34,14 @@ import brave.propagation.TraceContextOrSamplingFlags;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.apache.camel.management.event.ExchangeCreatedEvent;
-import org.apache.camel.management.event.ExchangeSentEvent;
+import org.apache.camel.impl.event.ExchangeCreatedEvent;
+import org.apache.camel.impl.event.ExchangeSentEvent;
+import org.apache.camel.spi.CamelEvent;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
-
-import java.util.EventObject;
 
 import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_EVENT_CREATED_ANNOTATION;
 import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_ID_TAG_ANNOTATION;
@@ -67,6 +67,9 @@ public class CreatedEventNotifierTest {
     @Mock
     private TraceContextOrSamplingFlags extractedContext;
 
+    @Mock
+    private Tracer tracer;
+
     private CreatedEventNotifier notifier;
 
     @Before
@@ -75,12 +78,12 @@ public class CreatedEventNotifierTest {
         when(propagation.extractor(any(Propagation.Getter.class))).thenReturn(extractor);
         when(propagation.injector(any(Propagation.Setter.class))).thenReturn(injector);
 
-        notifier = new CreatedEventNotifier(tracing, threadLocalSpan);
+        notifier = new CreatedEventNotifier(tracing, threadLocalSpan, tracer);
     }
 
     @Test
     public void shouldCreateRemoteSpanFromMessage() {
-        ExchangeCreatedEvent event = mock(ExchangeCreatedEvent.class);
+        CamelEvent.ExchangeCreatedEvent event = mock(CamelEvent.ExchangeCreatedEvent.class);
         Exchange exchange = mock(Exchange.class);
         Endpoint endpoint = mock(Endpoint.class);
         Message message = mock(Message.class);
@@ -113,7 +116,7 @@ public class CreatedEventNotifierTest {
 
     @Test
     public void shouldBeEnabledInCaseOfCreatedEvent() {
-        EventObject event = new ExchangeCreatedEvent(mock(Exchange.class));
+        CamelEvent event = new ExchangeCreatedEvent(mock(Exchange.class));
 
         boolean result = notifier.isEnabled(event);
 
@@ -122,7 +125,7 @@ public class CreatedEventNotifierTest {
 
     @Test
     public void shouldNotBeEnabledInCaseOfSentEvent() {
-        EventObject event = new ExchangeSentEvent(mock(Exchange.class), null, 100);
+        CamelEvent event = new ExchangeSentEvent(mock(Exchange.class), null, 100);
 
         boolean result = notifier.isEnabled(event);
 

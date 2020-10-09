@@ -25,6 +25,7 @@
 package com.playtika.sleuth.camel;
 
 import brave.Span;
+import brave.Tracer;
 import brave.Tracing;
 import brave.propagation.ThreadLocalSpan;
 import brave.propagation.TraceContext;
@@ -33,11 +34,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.camel.Endpoint;
 import org.apache.camel.Exchange;
 import org.apache.camel.Message;
-import org.apache.camel.management.event.ExchangeCreatedEvent;
+import org.apache.camel.spi.CamelEvent;
 import org.apache.camel.support.EventNotifierSupport;
 import org.springframework.cloud.sleuth.util.SpanNameUtil;
 
-import java.util.EventObject;
+import javax.swing.table.TableCellRenderer;
 
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
 
@@ -49,23 +50,28 @@ public class CreatedEventNotifier extends EventNotifierSupport {
     private static final String MESSAGE_COMPONENT = "camel";
 
     private final ThreadLocalSpan threadLocalSpan;
+
     private final TraceContext.Injector<Message> injector;
     private final TraceContext.Extractor<Message> extractor;
+    private final Tracer tracer;
 
-    public CreatedEventNotifier(Tracing tracing, ThreadLocalSpan threadLocalSpan) {
+    public CreatedEventNotifier(Tracing tracing, ThreadLocalSpan threadLocalSpan, Tracer tracer) {
         this.threadLocalSpan = threadLocalSpan;
+        this.tracer = tracer;
         this.injector = tracing.propagation().injector(Message::setHeader);
         this.extractor = tracing.propagation().extractor((carrier, key) -> carrier.getHeader(key, String.class));
     }
 
     @Override
-    public void notify(EventObject event) {
+    public void notify(CamelEvent event) {
         log.trace("Caught an event [{} - {}] - processing...", event.getClass().getSimpleName(), event);
-        ExchangeCreatedEvent exchangeCreatedEvent = (ExchangeCreatedEvent) event;
+        CamelEvent.ExchangeCreatedEvent exchangeCreatedEvent = (CamelEvent.ExchangeCreatedEvent) event;
         Exchange exchange = exchangeCreatedEvent.getExchange();
         Endpoint endpoint = exchange.getFromEndpoint();
         Message message = exchange.getIn();
         TraceContextOrSamplingFlags extractedContext = extractor.extract(message);
+        boolean isExternalContext = TraceContextOrSamplingFlags.EMPTY != extractedContext;
+        Span possiblyExistingSpan = tracer.currentSpan();
 
         Span span = threadLocalSpan.next(extractedContext);
         String spanName = getSpanName(endpoint);
@@ -77,8 +83,18 @@ public class CreatedEventNotifier extends EventNotifierSupport {
 
         exchange.setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
 
+        // If an external tracing context could be extracted from the message, there is no
+        // need to set a different one.
+        if (!isExternalContext) {
+            if (null != possiblyExistingSpan) {
+                // A span already existed prior to being called, so put that span context into the message
+                injector.inject(possiblyExistingSpan.context(), message);
+            } else {
+                // The span was created in this notifier, so use it.
+                injector.inject(span.context(), message);
+            }
+        }
         log.debug("Created/continued span [{}]", span);
-        injector.inject(span.context(), message);
     }
 
     private String getSpanName(Endpoint endpoint) {
@@ -86,7 +102,8 @@ public class CreatedEventNotifier extends EventNotifierSupport {
     }
 
     @Override
-    public boolean isEnabled(EventObject event) {
-        return event instanceof ExchangeCreatedEvent;
+    public boolean isEnabled(CamelEvent event) {
+        return event instanceof CamelEvent.ExchangeCreatedEvent;
     }
+
 }
