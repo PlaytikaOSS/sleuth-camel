@@ -53,7 +53,7 @@ public class SleuthCamelAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     public CreatedEventNotifier createdEventNotifier(Tracing tracing, ThreadLocalSpan threadLocalSpan) {
-        CreatedEventNotifier createdEventNotifier = new CreatedEventNotifier(tracing, threadLocalSpan);
+        CreatedEventNotifier createdEventNotifier = new CreatedEventNotifier(tracing, threadLocalSpan, tracer);
         camelContext.getManagementStrategy().addEventNotifier(createdEventNotifier);
         return createdEventNotifier;
     }
