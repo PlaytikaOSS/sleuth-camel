@@ -7,7 +7,7 @@
     <groupId>com.playtika.sleuth</groupId>
     <artifactId>sleuth-camel</artifactId>
     <packaging>pom</packaging>
-    <version>3.5.0-SNAPSHOT</version>
+    <version>1.0.2-SNAPSHOT</version>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -38,8 +38,8 @@
     </modules>
 
     <properties>
-        <maven.compiler.source>11</maven.compiler.source>
-        <maven.compiler.target>11</maven.compiler.target>
+        <maven.compiler.source>1.8</maven.compiler.source>
+        <maven.compiler.target>1.8</maven.compiler.target>
 
         <spring-cloud-dependencies.version>Hoxton.SR8</spring-cloud-dependencies.version>
         <camel.version>3.5.0</camel.version>
