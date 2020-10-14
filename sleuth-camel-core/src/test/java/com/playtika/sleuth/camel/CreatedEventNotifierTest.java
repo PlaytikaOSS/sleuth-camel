@@ -82,7 +82,7 @@ public class CreatedEventNotifierTest {
     }
 
     @Test
-    public void shouldCreateRemoteSpanFromMessage() {
+    public void shouldContinueSpan() {
         CamelEvent.ExchangeCreatedEvent event = mock(CamelEvent.ExchangeCreatedEvent.class);
         Exchange exchange = mock(Exchange.class);
         Endpoint endpoint = mock(Endpoint.class);
@@ -98,18 +98,85 @@ public class CreatedEventNotifierTest {
         when(exchange.getExchangeId()).thenReturn(someExchangeId);
         when(endpoint.getEndpointKey()).thenReturn(endpointKet);
 
-        when(extractor.extract(message)).thenReturn(extractedContext);
-        when(threadLocalSpan.next(extractedContext)).thenReturn(span);
+        when(extractor.extract(message)).thenReturn(TraceContextOrSamplingFlags.EMPTY);
+        when(threadLocalSpan.next(TraceContextOrSamplingFlags.EMPTY)).thenReturn(span);
         when(span.context()).thenReturn(traceContext);
 
         notifier.notify(event);
 
+        verify(tracer).currentSpan();
         verify(span).name("camel::" + endpointKet);
         verify(span).start();
         verify(span).annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);
         verify(span).tag(EXCHANGE_ID_TAG_ANNOTATION, exchange.getExchangeId());
         verify(exchange).setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
         verify(injector).inject(traceContext, message);
+
+        verifyNoMoreInteractions(tracing, threadLocalSpan, span);
+    }
+
+    @Test
+    public void shouldStartNewSpan() {
+        CamelEvent.ExchangeCreatedEvent event = mock(CamelEvent.ExchangeCreatedEvent.class);
+        Exchange exchange = mock(Exchange.class);
+        Endpoint endpoint = mock(Endpoint.class);
+        Message message = mock(Message.class);
+        Span span = mock(Span.class);
+        TraceContext traceContext = mock(TraceContext.class);
+        String someExchangeId = "some exchange Id";
+        String endpointKet = "camelDirectRoute";
+
+        when(event.getExchange()).thenReturn(exchange);
+        when(exchange.getFromEndpoint()).thenReturn(endpoint);
+        when(exchange.getIn()).thenReturn(message);
+        when(exchange.getExchangeId()).thenReturn(someExchangeId);
+        when(endpoint.getEndpointKey()).thenReturn(endpointKet);
+
+        when(tracer.currentSpan()).thenReturn(span);
+        when(extractor.extract(message)).thenReturn(TraceContextOrSamplingFlags.EMPTY);
+        when(threadLocalSpan.next(TraceContextOrSamplingFlags.EMPTY)).thenReturn(span);
+        when(span.context()).thenReturn(traceContext);
+
+        notifier.notify(event);
+
+        verify(tracer).currentSpan();
+        verify(span).name("camel::" + endpointKet);
+        verify(span).start();
+        verify(span).annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);
+        verify(span).tag(EXCHANGE_ID_TAG_ANNOTATION, exchange.getExchangeId());
+        verify(exchange).setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
+        verify(injector).inject(traceContext, message);
+
+        verifyNoMoreInteractions(tracing, threadLocalSpan, span);
+    }
+
+    @Test
+    public void shouldHonourRemoteSpanFromMessage() {
+        CamelEvent.ExchangeCreatedEvent event = mock(CamelEvent.ExchangeCreatedEvent.class);
+        Exchange exchange = mock(Exchange.class);
+        Endpoint endpoint = mock(Endpoint.class);
+        Message message = mock(Message.class);
+        Span span = mock(Span.class);
+        String someExchangeId = "some exchange Id";
+        String endpointKet = "camelDirectRoute";
+
+        when(event.getExchange()).thenReturn(exchange);
+        when(exchange.getFromEndpoint()).thenReturn(endpoint);
+        when(exchange.getIn()).thenReturn(message);
+        when(exchange.getExchangeId()).thenReturn(someExchangeId);
+        when(endpoint.getEndpointKey()).thenReturn(endpointKet);
+
+        when(extractor.extract(message)).thenReturn(extractedContext);
+        when(threadLocalSpan.next(extractedContext)).thenReturn(span);
+
+        notifier.notify(event);
+
+        verify(tracer).currentSpan();
+        verify(span).name("camel::" + endpointKet);
+        verify(span).start();
+        verify(span).annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);
+        verify(span).tag(EXCHANGE_ID_TAG_ANNOTATION, exchange.getExchangeId());
+        verify(exchange).setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
 
         verifyNoMoreInteractions(tracing, threadLocalSpan, span);
     }
