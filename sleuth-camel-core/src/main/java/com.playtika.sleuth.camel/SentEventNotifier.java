@@ -31,13 +31,11 @@ import brave.propagation.ThreadLocalSpan;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.camel.Exchange;
-import org.apache.camel.management.event.AbstractExchangeEvent;
-import org.apache.camel.management.event.ExchangeCompletedEvent;
-import org.apache.camel.management.event.ExchangeFailedEvent;
-import org.apache.camel.management.event.ExchangeSentEvent;
+import org.apache.camel.impl.event.AbstractExchangeEvent;
+import org.apache.camel.impl.event.ExchangeSentEvent;
+import org.apache.camel.spi.CamelEvent;
 import org.apache.camel.support.EventNotifierSupport;
 
-import java.util.EventObject;
 import java.util.Objects;
 
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
@@ -53,8 +51,8 @@ public class SentEventNotifier extends EventNotifierSupport {
     private final ErrorParser errorParser;
 
     @Override
-    public void notify(EventObject event) {
-        if (!(event instanceof ExchangeFailedEvent) && !(event instanceof ExchangeCompletedEvent) && !(event instanceof ExchangeSentEvent)) {
+    public void notify(CamelEvent event) {
+        if (!(event instanceof CamelEvent.ExchangeFailedEvent) && !(event instanceof CamelEvent.ExchangeCompletedEvent) && !(event instanceof CamelEvent.ExchangeSentEvent)) {
             return;
         }
 
@@ -93,7 +91,7 @@ public class SentEventNotifier extends EventNotifierSupport {
     /**
      * Handling the case when exchange goes to child route, assuming to have single span for all nested routes.
      */
-    private boolean isFromSourceEndpoint(EventObject event) {
+    private boolean isFromSourceEndpoint(CamelEvent event) {
         if (!(event instanceof ExchangeSentEvent)) {
             return true;
         }
@@ -104,17 +102,12 @@ public class SentEventNotifier extends EventNotifierSupport {
         return Objects.equals(exchangeEndpointKey, eventEndpointKey);
     }
 
-    private void logExceptionIfExists(EventObject event, Span span) {
+    private void logExceptionIfExists(CamelEvent event, Span span) {
         AbstractExchangeEvent abstractExchangeEvent = (AbstractExchangeEvent) event;
         Exception exception = abstractExchangeEvent.getExchange().getException();
         if (exception != null) {
             errorParser.error(exception, span);
         }
-    }
-
-    @Override
-    public boolean isEnabled(EventObject event) {
-        return true;
     }
 }
 

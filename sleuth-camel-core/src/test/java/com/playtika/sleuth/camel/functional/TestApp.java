@@ -30,6 +30,7 @@ import org.apache.camel.Processor;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.builder.RouteBuilder;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.sleuth.annotation.NewSpan;
 import org.springframework.cloud.sleuth.util.ArrayListSpanReporter;
 import org.springframework.context.annotation.Bean;
@@ -37,8 +38,8 @@ import org.springframework.context.annotation.Configuration;
 
 import static org.apache.camel.LoggingLevel.INFO;
 
+@SpringBootApplication
 @Configuration
-@EnableAutoConfiguration
 public class TestApp {
 
     static final String DIRECT_ROUTE_URI = "direct:directRoute";
