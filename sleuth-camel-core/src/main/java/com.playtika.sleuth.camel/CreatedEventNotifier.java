@@ -38,8 +38,6 @@ import org.apache.camel.spi.CamelEvent;
 import org.apache.camel.support.EventNotifierSupport;
 import org.springframework.cloud.sleuth.util.SpanNameUtil;
 
-import javax.swing.table.TableCellRenderer;
-
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
 
 @Slf4j
