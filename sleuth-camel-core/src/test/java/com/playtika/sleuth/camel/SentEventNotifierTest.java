@@ -58,14 +58,10 @@ public class SentEventNotifierTest {
     @InjectMocks
     private SentEventNotifier sentEventNotifier;
 
-    @BeforeEach
-    public void setUp() {
-        sentEventNotifier = new SentEventNotifier(tracer, threadLocalSpan);
-    }
-
     @AfterEach
     public void tearDown() {
         verifyNoMoreInteractions(tracer);
+        sentEventNotifier = null;
     }
 
     @Test
