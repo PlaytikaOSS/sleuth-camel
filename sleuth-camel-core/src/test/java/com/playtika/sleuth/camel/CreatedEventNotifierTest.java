@@ -37,18 +37,26 @@ import org.apache.camel.Message;
 import org.apache.camel.impl.event.ExchangeCreatedEvent;
 import org.apache.camel.impl.event.ExchangeSentEvent;
 import org.apache.camel.spi.CamelEvent;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_EVENT_CREATED_ANNOTATION;
 import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_ID_TAG_ANNOTATION;
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.STRICT_STUBS)
 @TestInstance(PER_CLASS)
 public class CreatedEventNotifierTest {
 
@@ -73,7 +81,6 @@ public class CreatedEventNotifierTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-        MockitoAnnotations.openMocks(this).close();
         when(tracing.propagation()).thenReturn(propagation);
         when(propagation.extractor(any(Propagation.Getter.class))).thenReturn(extractor);
         when(propagation.injector(any(Propagation.Setter.class))).thenReturn(injector);

@@ -33,28 +33,33 @@ import org.apache.camel.impl.event.ExchangeCompletedEvent;
 import org.apache.camel.impl.event.ExchangeSentEvent;
 import org.apache.camel.spi.CamelEvent;
 import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import static com.playtika.sleuth.camel.SentEventNotifier.EXCHANGE_EVENT_SENT_ANNOTATION;
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
 import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.STRICT_STUBS)
 @TestInstance(PER_CLASS)
 public class SentEventNotifierTest {
 
-    @Mock
+    @Mock()
     private Tracer tracer;
     @Mock
     private ThreadLocalSpan threadLocalSpan;
-
+    @InjectMocks
     private SentEventNotifier sentEventNotifier;
 
     @BeforeEach
-    public void setUp() throws Exception {
-        MockitoAnnotations.openMocks(this).close();
+    public void setUp() {
         sentEventNotifier = new SentEventNotifier(tracer, threadLocalSpan);
     }
 
