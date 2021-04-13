@@ -26,17 +26,17 @@ package com.playtika.sleuth.camel.functional;
 
 import brave.ScopedSpan;
 import brave.Tracer;
+import brave.handler.MutableSpan;
 import brave.propagation.B3SingleFormat;
+import brave.test.TestSpanHandler;
 import org.apache.camel.*;
 import org.apache.camel.component.mock.MockEndpoint;
-import org.junit.After;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.cloud.sleuth.util.ArrayListSpanReporter;
-import org.springframework.test.context.junit4.SpringRunner;
 
 import java.util.HashMap;
 import java.util.List;
@@ -46,10 +46,10 @@ import static com.playtika.sleuth.camel.functional.TestApp.*;
 import static org.apache.camel.component.mock.MockEndpoint.resetMocks;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 import static org.mockito.Mockito.*;
 
-@RunWith(SpringRunner.class)
+@TestInstance(PER_CLASS)
 @SpringBootTest(
         classes = TestApp.class,
         webEnvironment = SpringBootTest.WebEnvironment.NONE,
@@ -79,8 +79,7 @@ public class FunctionalTest {
     private MockEndpoint exceptionRouteMockEndpoint;
 
     @Autowired
-    private ArrayListSpanReporter spanReporter;
-
+    private TestSpanHandler testSpanHandler;
     @Autowired
     private Tracer tracer;
     @Autowired
@@ -91,14 +90,14 @@ public class FunctionalTest {
 
     private ScopedSpan existingSpan;
 
-    @After
+    @AfterEach
     public void tearDown() throws Exception {
         resetMocks(camelContext);
         if (existingSpan != null) {
             existingSpan.finish();
             existingSpan = null;
         }
-        spanReporter.clear();
+        testSpanHandler.clear();
 
         verify(mockProcessor).process(any(Exchange.class));
         verifyNoMoreInteractions(mockProcessor);
@@ -244,13 +243,13 @@ public class FunctionalTest {
         assertThat(headers.get(SINGLE_B3_HEADER_NAME)).isNotNull();
 
         //assert span logs
-        zipkin2.Span span = getSingleAccumulatedSpan();
+        MutableSpan span = getSingleAccumulatedSpan();
         assertTagApplied(span, "error", errorMessage);
 
         verify(mockProcessor).process(any(Exchange.class));
     }
 
-    private void assertTagApplied(zipkin2.Span span, String tag, String value) {
+    private void assertTagApplied(MutableSpan span, String tag, String value) {
         String sampledErrorMessage = span.tags().get(tag);
         assertThat(sampledErrorMessage).isEqualTo(value);
     }
@@ -261,23 +260,23 @@ public class FunctionalTest {
         return message.getHeaders();
     }
 
-    private zipkin2.Span getSingleAccumulatedSpan() {
-        List<zipkin2.Span> spans = spanReporter.getSpans();
+    private MutableSpan getSingleAccumulatedSpan() {
+        List<MutableSpan> spans = testSpanHandler.spans();
         assertThat(spans.size()).isEqualTo(1);
         return spans.get(0);
     }
 
     private void assertAccumulatedSpans(String routeName) {
-        List<zipkin2.Span> spans = spanReporter.getSpans();
+        List<MutableSpan> spans = testSpanHandler.spans();
         assertThat(spans.size()).isEqualTo(2);
 
-        zipkin2.Span childSpan = spans.get(0);
-        zipkin2.Span span = spans.get(1);
+        MutableSpan childSpan = spans.get(0);
+        MutableSpan span = spans.get(1);
 
         assertSpanParameters(span, childSpan, routeName);
     }
 
-    private void assertSpanParameters(zipkin2.Span parent, zipkin2.Span child, String routeName) {
+    private void assertSpanParameters(MutableSpan parent, MutableSpan child, String routeName) {
         assertThat(child.traceId()).isEqualTo(parent.traceId());
         assertThat(child.parentId()).isEqualTo(parent.id());
         assertThat(parent.name()).isEqualTo("camel::direct://" + routeName);

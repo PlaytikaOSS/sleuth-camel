@@ -24,8 +24,8 @@
 
 package com.playtika.sleuth.camel;
 
-import brave.ErrorParser;
 import brave.Span;
+import brave.Tags;
 import brave.Tracer;
 import brave.propagation.ThreadLocalSpan;
 import lombok.AllArgsConstructor;
@@ -48,7 +48,6 @@ public class SentEventNotifier extends EventNotifierSupport {
 
     private final Tracer tracer;
     private final ThreadLocalSpan threadLocalSpan;
-    private final ErrorParser errorParser;
 
     @Override
     public void notify(CamelEvent event) {
@@ -85,7 +84,7 @@ public class SentEventNotifier extends EventNotifierSupport {
 
     private boolean isCamelSpan(Exchange exchange) {
         Boolean isTracing = exchange.getProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.class);
-        return isTracing == null ? false : isTracing;
+        return isTracing != null && isTracing;
     }
 
     /**
@@ -106,7 +105,7 @@ public class SentEventNotifier extends EventNotifierSupport {
         AbstractExchangeEvent abstractExchangeEvent = (AbstractExchangeEvent) event;
         Exception exception = abstractExchangeEvent.getExchange().getException();
         if (exception != null) {
-            errorParser.error(exception, span);
+            Tags.ERROR.tag(exception, span);
         }
     }
 }

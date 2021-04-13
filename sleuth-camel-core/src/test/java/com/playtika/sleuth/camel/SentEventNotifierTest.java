@@ -24,7 +24,6 @@
 
 package com.playtika.sleuth.camel;
 
-import brave.ErrorParser;
 import brave.Span;
 import brave.Tracer;
 import brave.propagation.ThreadLocalSpan;
@@ -33,33 +32,35 @@ import org.apache.camel.Exchange;
 import org.apache.camel.impl.event.ExchangeCompletedEvent;
 import org.apache.camel.impl.event.ExchangeSentEvent;
 import org.apache.camel.spi.CamelEvent;
-import org.junit.After;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.InjectMocks;
+import org.junit.jupiter.api.*;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.Mockito;
+import org.mockito.MockitoAnnotations;
 
 import static com.playtika.sleuth.camel.SentEventNotifier.EXCHANGE_EVENT_SENT_ANNOTATION;
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
+import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 import static org.mockito.Mockito.*;
 
-@RunWith(MockitoJUnitRunner.StrictStubs.class)
+@TestInstance(PER_CLASS)
 public class SentEventNotifierTest {
 
     @Mock
     private Tracer tracer;
     @Mock
-    private ErrorParser errorParser;
-    @Mock
     private ThreadLocalSpan threadLocalSpan;
 
-    @InjectMocks
     private SentEventNotifier sentEventNotifier;
 
-    @After
+    @BeforeEach
+    public void setUp() throws Exception {
+        MockitoAnnotations.openMocks(this).close();
+        sentEventNotifier = new SentEventNotifier(tracer, threadLocalSpan);
+    }
+
+    @AfterEach
     public void tearDown() {
-        verifyNoMoreInteractions(tracer, errorParser);
+        verifyNoMoreInteractions(tracer);
     }
 
     @Test
@@ -76,6 +77,7 @@ public class SentEventNotifierTest {
 
         sentEventNotifier.notify(event);
 
+        verify(tracer).currentSpan();
         verify(exchange).removeProperty(EXCHANGE_IS_TRACED_BY_BRAVE);
         verify(spanToSend).annotate(EXCHANGE_EVENT_SENT_ANNOTATION);
         verify(spanToSend).finish();
@@ -97,10 +99,15 @@ public class SentEventNotifierTest {
 
         sentEventNotifier.notify(event);
 
+        verify(tracer).currentSpan();
         verify(exchange).removeProperty(EXCHANGE_IS_TRACED_BY_BRAVE);
-        verify(errorParser).error(exception, spanToSend);
         verify(spanToSend).annotate(EXCHANGE_EVENT_SENT_ANNOTATION);
         verify(spanToSend).finish();
+        verify(spanToSend).tag(Mockito.any(), Mockito.any());
+        verify(spanToSend).annotate(Mockito.any());
+        verify(spanToSend).finish();
+        verify(spanToSend).isNoop();
+        verify(spanToSend).context();
         verifyNoMoreInteractions(currentSpan, spanToSend);
     }
 
@@ -120,6 +127,7 @@ public class SentEventNotifierTest {
 
         sentEventNotifier.notify(event);
 
+        verify(tracer).currentSpan();
         verifyNoMoreInteractions(currentSpan);
     }
 
@@ -134,6 +142,7 @@ public class SentEventNotifierTest {
 
         sentEventNotifier.notify(event);
 
+        verify(tracer).currentSpan();
         verifyNoMoreInteractions(currentSpan);
     }
 
@@ -144,6 +153,8 @@ public class SentEventNotifierTest {
         when(tracer.currentSpan()).thenReturn(null);
 
         sentEventNotifier.notify(event);
+
+        verify(tracer).currentSpan();
     }
 
 }
