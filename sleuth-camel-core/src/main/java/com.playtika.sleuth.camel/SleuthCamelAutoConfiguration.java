@@ -24,7 +24,6 @@
 
 package com.playtika.sleuth.camel;
 
-import brave.ErrorParser;
 import brave.Tracer;
 import brave.Tracing;
 import brave.propagation.ThreadLocalSpan;
@@ -35,7 +34,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.cloud.sleuth.autoconfig.TraceAutoConfiguration;
+import org.springframework.cloud.sleuth.autoconfig.brave.BraveAutoConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -43,7 +42,7 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 @ConditionalOnBean(Tracer.class)
 @ConditionalOnClass({CamelContext.class})
-@AutoConfigureAfter(TraceAutoConfiguration.class)
+@AutoConfigureAfter({BraveAutoConfiguration.class})
 @ConditionalOnProperty(value = "spring.sleuth.camel.enabled", matchIfMissing = true)
 public class SleuthCamelAutoConfiguration {
 
@@ -60,8 +59,8 @@ public class SleuthCamelAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public SentEventNotifier sentEventNotifier(ErrorParser errorParser, ThreadLocalSpan threadLocalSpan) {
-        SentEventNotifier sentEventNotifier = new SentEventNotifier(tracer, threadLocalSpan, errorParser);
+    public SentEventNotifier sentEventNotifier(ThreadLocalSpan threadLocalSpan) {
+        SentEventNotifier sentEventNotifier = new SentEventNotifier(tracer, threadLocalSpan);
         camelContext.getManagementStrategy().addEventNotifier(sentEventNotifier);
         return sentEventNotifier;
     }

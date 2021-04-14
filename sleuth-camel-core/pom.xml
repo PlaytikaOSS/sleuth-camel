@@ -14,8 +14,8 @@
     <dependencies>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
-            <artifactId>spring-cloud-sleuth-core</artifactId>
-            <scope>provided</scope>
+            <artifactId>spring-cloud-starter-sleuth</artifactId>
+            <scope>compile</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -75,6 +75,14 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-inline</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/io.zipkin.brave/brave-tests -->
+        <dependency>
+            <groupId>io.zipkin.brave</groupId>
+            <artifactId>brave-tests</artifactId>
+            <version>${brave-test.version}</version>
             <scope>test</scope>
         </dependency>
 

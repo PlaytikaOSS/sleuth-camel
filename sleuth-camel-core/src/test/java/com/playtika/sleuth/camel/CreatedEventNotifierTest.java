@@ -37,20 +37,27 @@ import org.apache.camel.Message;
 import org.apache.camel.impl.event.ExchangeCreatedEvent;
 import org.apache.camel.impl.event.ExchangeSentEvent;
 import org.apache.camel.spi.CamelEvent;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.Mockito;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_EVENT_CREATED_ANNOTATION;
 import static com.playtika.sleuth.camel.CreatedEventNotifier.EXCHANGE_ID_TAG_ANNOTATION;
 import static com.playtika.sleuth.camel.SleuthCamelConstants.EXCHANGE_IS_TRACED_BY_BRAVE;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.TestInstance.Lifecycle.PER_CLASS;
 import static org.mockito.Mockito.*;
 
-@RunWith(MockitoJUnitRunner.StrictStubs.class)
+@ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.STRICT_STUBS)
+@TestInstance(PER_CLASS)
 public class CreatedEventNotifierTest {
 
     @Mock
@@ -72,12 +79,11 @@ public class CreatedEventNotifierTest {
 
     private CreatedEventNotifier notifier;
 
-    @Before
-    public void setUp() {
+    @BeforeEach
+    public void setUp() throws Exception {
         when(tracing.propagation()).thenReturn(propagation);
         when(propagation.extractor(any(Propagation.Getter.class))).thenReturn(extractor);
         when(propagation.injector(any(Propagation.Setter.class))).thenReturn(injector);
-
         notifier = new CreatedEventNotifier(tracing, threadLocalSpan, tracer);
     }
 
@@ -104,11 +110,14 @@ public class CreatedEventNotifierTest {
 
         notifier.notify(event);
 
+        verify(tracing, times(2)).propagation();
+        verify(threadLocalSpan).next(Mockito.any());
         verify(tracer).currentSpan();
         verify(span).name("camel::" + endpointKet);
         verify(span).start();
         verify(span).annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);
         verify(span).tag(EXCHANGE_ID_TAG_ANNOTATION, exchange.getExchangeId());
+        verify(span).context();
         verify(exchange).setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
         verify(injector).inject(traceContext, message);
 
@@ -139,11 +148,14 @@ public class CreatedEventNotifierTest {
 
         notifier.notify(event);
 
+        verify(tracing, times(2)).propagation();
         verify(tracer).currentSpan();
+        verify(threadLocalSpan).next(Mockito.any());
         verify(span).name("camel::" + endpointKet);
         verify(span).start();
         verify(span).annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);
         verify(span).tag(EXCHANGE_ID_TAG_ANNOTATION, exchange.getExchangeId());
+        verify(span).context();
         verify(exchange).setProperty(EXCHANGE_IS_TRACED_BY_BRAVE, Boolean.TRUE);
         verify(injector).inject(traceContext, message);
 
@@ -171,7 +183,9 @@ public class CreatedEventNotifierTest {
 
         notifier.notify(event);
 
+        verify(tracing, times(2)).propagation();
         verify(tracer).currentSpan();
+        verify(threadLocalSpan).next(Mockito.any());
         verify(span).name("camel::" + endpointKet);
         verify(span).start();
         verify(span).annotate(EXCHANGE_EVENT_CREATED_ANNOTATION);

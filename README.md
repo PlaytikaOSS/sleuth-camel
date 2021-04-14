@@ -18,8 +18,8 @@ In order to integrate functionality provided by this library tou need to add fol
 
 ```xml
 <dependency>
-   <artifactId>sleuth-camel-core</artifactId>
-   <groupId>com.playtika.sleuth</groupId>
+    <groupId>com.playtika.sleuth</groupId>
+    <artifactId>sleuth-camel-core</artifactId>
 </dependency>
 ```
 And that is pretty all, library contains spring boot auto-configuration which will do the magic with your camel context for you.
@@ -28,4 +28,7 @@ If for some reason integration should be disabled - just add following property:
 spring.sleuth.camel.enabled=false
 ```
 
-For boot 1.5.x use 1.x version, for Spring boot 2.x.x version - sleuth-camel-core 2.x version should be used.
+Version correspondence:
+* Spring Boot 1.5.x: sleuth-camel-core 1.x.
+* Spring Boot 2.0.x-2.3.x: sleuth-camel-core 2.0.x.
+* Spring Boot 2.4+: sleuth-camel-core 2.1.x.

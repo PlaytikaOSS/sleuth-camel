@@ -25,14 +25,13 @@
 package com.playtika.sleuth.camel.functional;
 
 import brave.sampler.Sampler;
+import brave.test.TestSpanHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.camel.Processor;
 import org.apache.camel.RoutesBuilder;
 import org.apache.camel.builder.RouteBuilder;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.sleuth.annotation.NewSpan;
-import org.springframework.cloud.sleuth.util.ArrayListSpanReporter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -46,8 +45,8 @@ public class TestApp {
     static final String ASYNC_DIRECT_ROUTE_URI = "direct:asyncDirectRoute";
     static final String MOCK_DIRECT_ROUTE_TO_URI = "mock:directRouteTo";
     static final String MOCK_EXCEPTION_ROUTE_TO_URI = "mock:exceptionRouteTo";
-    static final String DIRECT_ROUTE_ID = "directroute";
-    static final String ASYNC_DIRECT_ROUTE_ID = "asyncdirectroute";
+    static final String DIRECT_ROUTE_ID = "directRoute";
+    static final String ASYNC_DIRECT_ROUTE_ID = "asyncDirectRoute";
 
     @Bean
     public Sampler alwaysSampler() {
@@ -55,8 +54,8 @@ public class TestApp {
     }
 
     @Bean
-    public ArrayListSpanReporter arrayListSpanAccumulator() {
-        return new ArrayListSpanReporter();
+    public TestSpanHandler testSpanHandler() {
+        return new TestSpanHandler();
     }
 
     @Bean
