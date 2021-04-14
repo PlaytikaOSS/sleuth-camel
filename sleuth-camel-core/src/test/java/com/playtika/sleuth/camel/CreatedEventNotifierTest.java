@@ -84,7 +84,6 @@ public class CreatedEventNotifierTest {
         when(tracing.propagation()).thenReturn(propagation);
         when(propagation.extractor(any(Propagation.Getter.class))).thenReturn(extractor);
         when(propagation.injector(any(Propagation.Setter.class))).thenReturn(injector);
-
         notifier = new CreatedEventNotifier(tracing, threadLocalSpan, tracer);
     }
 
