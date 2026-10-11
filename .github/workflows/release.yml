@@ -1,0 +1,21 @@
+name: Publish to Maven Central
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  release:
+    uses: PlaytikaOSS/playtika-workflows/.github/workflows/maven-central-release.yml@414efe1258d11ba5dcd2f9de4a9fcf82bd915c38
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    with:
+      workflow-sha: 414efe1258d11ba5dcd2f9de4a9fcf82bd915c38
+      group-id: com.playtika.sleuth
+      release-branch: develop
+      java-version: '8'
